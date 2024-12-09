@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Scraper API Service</title>
+    <link rel="icon" href="./favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="./style.css">
+  </head>
+  <body>
+    <header>
+        <a href="/" class="titel">ScraperAPI Service</a>
+        <span>v0.1.0</span>
+    </header>
+    <main>
+        <p>Lorem ipsum dolor sit amet consectetur adipisicing elit. Perferendis nemo deserunt, commodi sequi assumenda repudiandae placeat aliquam esse, ipsam fuga nesciunt sapiente quaerat asperiores doloribus distinctio nihil cumque veritatis optio!</p>
+        <h3 class="underline">Token</h3>
+        <p>Lorem ipsum dolor sit amet consectetur adipisicing elit. Minus ipsam placeat porro cupiditate commodi. Est beatae eaque nesciunt, molestiae, alias quod enim odio dolor quae, ducimus mollitia rerum quo error.</p>
+        <input type="text" id="token-input">
+        <h3 class="underline">Input item</h3>
+        <p>Lorem ipsum dolor sit amet consectetur, adipisicing elit. Sequi molestiae corporis, soluta iure, illum voluptate numquam incidunt ratione cupiditate fuga animi exercitationem eaque, blanditiis quasi suscipit modi vitae eveniet vel!</p>
+        <div class="input-block">
+            <div class="select">
+                <div class="selected">oz</div>
+                <ul class="options" id="mp-options">
+                  <li data-value="oz">oz</li>
+                  <li data-value="wb">wb</li>
+                </ul>
+            </div>
+            <input type="text" id="item-id-input">
+            <button class="add-item-btn">Add item</button>
+        </div>
+        <h3 class="underline">Proxy list</h3>
+        <p>Lorem ipsum dolor sit amet consectetur adipisicing elit. Molestias repellendus maiores assumenda labore corrupti nostrum deserunt, numquam veniam? Voluptates hic in iste eos rem asperiores dolor qui consequuntur dignissimos voluptas!</p>
+        <div class="input-block">
+            <input type="text" id="proxy-input">
+            <button class="push-proxy-btn">Push</button>
+        </div>
+        <h3 class="underline">Request body</h3>
+        <div class="request-body">
+            <pre>       
+<code class="language-javascript">{
+    token: "",
+    items: [],
+    proxy_list: []
+}</code>
+            </pre>
+        </div>
+        <h3>Progress bar</h3>
+        <div class="progress-bar-wraperr">
+            <div class="progress-bar">
+                <div class="progress-bar-line"></div>
+            </div>
+            <span class="progress-bar-status">1/3</span>
+        </div>
+    </main>
+
+  </body>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+  <script src="./main.js"></script>
+</html>
