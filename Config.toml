@@ -1,0 +1,14 @@
+[server]
+addr = "127.0.0.1"
+port = 5500
+
+[api]
+version = "0.1.0"
+order_limit_items = 250
+db = "sqlite:scraper_api.db"
+db_max_conn = 2
+task_handlers = 1
+handler_queue_limit = 21
+
+[scraper]
+
