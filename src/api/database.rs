@@ -8,6 +8,7 @@ use super::models::{
     Token,
     Task
 };
+use super::config as cfg;
 
 
 type Error = Box<dyn std::error::Error>;
@@ -15,17 +16,18 @@ type Result<T> = core::result::Result<T, Error>;
 pub type Pool = SqlitePool;
 
 
-static DB: &'static str = "sqlite:scraper_api.db";
-
-
 pub async fn init() -> Result<Pool> {
-    if !Sqlite::database_exists(DB).await? {
-        Sqlite::create_database(DB).await?;
+    let db = &cfg::get().api.db;
+
+    if !Sqlite::database_exists(db).await? {
+        Sqlite::create_database(db).await?;
     }
 
     let pool = SqlitePoolOptions::new()
-        .max_connections(4)
-        .connect(DB)
+        .max_connections(
+            cfg::get().api.db_max_conn
+        )
+        .connect(db)
         .await?;
 
     sqlx::query(

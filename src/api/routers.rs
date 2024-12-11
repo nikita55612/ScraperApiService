@@ -43,6 +43,7 @@ fn init_router() -> Router {
 
         .route("/hello_world", get(hello_world))
         .route("/myip", get(myip))
+        //.route("/api/*path", method_router)
 
         .fallback_service(
             ServeFile::new(
@@ -67,8 +68,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_routers() {
+        //ssh -R 5500:localhost:5500 -N -f -o "ServerAliveInterval 60" -o "ServerAliveCountMax 3" server
         let app = init_router();
-        let listener = tokio::net::TcpListener::bind("0.0.0.0:5501").await.unwrap();
+        let listener = tokio::net::TcpListener::bind("0.0.0.0:5500").await.unwrap();
         axum::serve(
             listener, app.into_make_service_with_connect_info::<SocketAddr>()
         ).await

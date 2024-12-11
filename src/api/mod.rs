@@ -20,21 +20,25 @@ mod tests {
         let db_pool = Arc::new(
             database::init().await.unwrap()
         );
-        let app_state = states::AppState::new(db_pool, 2).await;
+        let app_state = states::AppState::new(db_pool, 1).await;
 
         let mut task_id = String::new();
 
-        for n in 0..6 {
+        for n in 0..4 {
             tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
             println!("Task №{n}");
             let order = models::Order {
                 token_id: utils::gen_token_id(),
                 type_: models::OrderTypes::Products,
                 items: vec![
+                    "oz/1234567895".into(), 
+                    "oz/1266647891".into(),
+                    "oz/9911784490".into(), 
+                    "oz/7538788890".into(),
                     "oz/1234567890".into(), 
-                    "oz/1234567891".into(),
-                    "oz/9999967890".into(), 
-                    "oz/7777767891".into(),
+                    "oz/1283567891".into(),
+                    "oz/8469967893".into(), 
+                    "oz/7754767891".into(),
                     format!("oz/{}", utils::timestamp_now())
                     ],
                 proxy_list: vec![
@@ -53,10 +57,12 @@ mod tests {
             } 
         }
 
-        
         loop {
             match app_state.get_task_state(&task_id).await {
-                Ok(ts) => println!("{ts}"),
+                Ok(ts) => {
+                    let v = serde_json::from_str::<serde_json::Value>(&ts).unwrap();
+                    println!("{}", serde_json::to_string_pretty(&v).unwrap());
+                },
                 Err(_) => break
             }
             tokio::time::sleep(tokio::time::Duration::from_millis(700)).await;

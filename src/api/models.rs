@@ -33,17 +33,23 @@ pub enum TaskStatus {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct TaskProgress {
-    pub done: u64,
-    pub total: u64
+pub struct TaskProgress(u64, u64);
+
+//TEMP
+use super::stream::ProductData;
+use std::collections::HashMap;
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all="lowercase")]
+pub enum ProductResult {
+    Data(ProductData),
+    Error(String)
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all="lowercase")]
 pub enum TaskResult {
-    #[serde(rename="data")]
-    Data(String),
-    #[serde(rename="error")]
+    Data(HashMap<String, ProductResult>),
     Error(String)
 }
 
@@ -53,6 +59,8 @@ pub enum OrderTypes {
     Products,
 }
 
+// Необходимо создать отдельную структуру для конфигурации закза
+// proxy_list должен входить в конфигурацию заказа
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Order {
     #[serde(skip_serializing)]
@@ -69,20 +77,23 @@ pub struct Task {
     pub order: Order,
     #[serde(skip_serializing)]
     pub order_hash: String,
-    pub queue_number: u64,
+    #[serde(rename="queueNum")]
+    pub queue_num: u64,
     pub status: TaskStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub progress: Option<TaskProgress>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<TaskResult>,
     pub created: u64,
 }
 
 impl TaskProgress {
     pub fn new(done: u64, total: u64) -> Self {
-        Self { done, total }
+        Self (done, total)
     }
 
     pub fn next_step(&mut self) {
-        self.done += 1;
+        self.0 += 1;
     }
 }
 
@@ -93,11 +104,61 @@ impl Task {
         Self {
             order: order,
             order_hash: order_hash,
-            queue_number: 0,
+            queue_num: 0,
             status: TaskStatus::Waiting,
             progress: None,
             result: None,
             created: timestamp_now(),
         }
     }
+
+    pub fn set_status(&mut self, status: TaskStatus) {
+        self.status = status
+    }
+
+    pub fn init_result_data(&mut self) {
+        self.result = Some(
+            TaskResult::Data(
+                HashMap::new()
+            )
+        )
+    }
+
+    pub fn insert_result_item(&mut self, k: String, v: ProductResult) {
+        if let Some(
+            TaskResult::Data(items_map)
+        ) = &mut self.result {
+            items_map.insert(k, v);
+        }
+    }
+
+    pub fn set_progress(&mut self, done: u64, total: u64) {
+        self.progress = Some(TaskProgress::new(done, total));
+    }
+
+    pub fn init_progress(&mut self) {
+        let total = self.order.items.len() as u64;
+        self.set_progress(0, total);
+    }
+
+    pub fn next_progress_step(&mut self) {
+        if let Some(progress) = self.progress.as_mut() {
+            progress.next_step();
+        }
+    }
+
+    pub fn get_curr_step(&self) -> u64 {
+        if let Some(TaskProgress(done, _)) = &self.progress {
+            return *done;
+        }
+        0
+    }
+
+    pub fn is_done(&self) -> bool {
+        if let Some(progress) = &self.progress {
+            return progress.0 == progress.1;
+        }
+        false
+    }
 }
+

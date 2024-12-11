@@ -19,29 +19,36 @@ use super::{
     database as db, 
     error::ApiError, 
     models::{Order, Task, TaskStatus}, 
-    stream::task_stream
+    stream::task_stream,
+    config as cfg
 };
 
 
 struct TaskHandler {
     pub task_heap: Arc<RwLock<HashMap<String, Task>>>,
+    pub queue_limit: u64,
     pub sender: Sender<String>,
     pub join_handle: JoinHandle<()>
 }
 
 impl TaskHandler {
     pub async fn run(db_pool: Arc<SqlitePool>) -> Self {
+        let queue_limit = cfg::get().api.handler_queue_limit;
         let task_heap = Arc::new(
-            RwLock::new(HashMap::with_capacity(10))
+            RwLock::new(
+                HashMap::with_capacity(queue_limit)
+            )
         );
-        let (sender, receiver) = mpsc::channel::<String>(10);
+        let (sender, receiver) = mpsc::channel::<String>(queue_limit);
         let join_handle = Self::spawn_handler(
             db_pool,
             receiver, 
             task_heap.clone()
         ).await;
+
         Self {
             task_heap: task_heap,
+            queue_limit: queue_limit as u64,
             sender,
             join_handle
         }
@@ -62,7 +69,7 @@ impl TaskHandler {
                     if matches!(task.status, TaskStatus::Completed | TaskStatus::Error) {
                         if task_heap.write().await.remove(&task_key).is_some() {
                             task_heap.write().await.values_mut()
-                                .for_each(|t| t.queue_number -= 1);
+                                .for_each(|t| t.queue_num -= 1);
                         }
 
                         let _ = db::insert_task(&db_pool, &task).await;
@@ -76,11 +83,12 @@ impl TaskHandler {
 
     pub async fn registering_task(&self, mut task: Task) -> Result<String, ApiError> {
         let task_count = self.task_heap.read().await.len() as u64;
-        if task_count >= 10 { 
-            return Err(ApiError::Info("task_count >= 10".into())); 
+        if task_count >= self.queue_limit { 
+            return Err(
+                ApiError::Info("task_count >= 10".into())
+            ); 
         }
-
-        task.queue_number = task_count;
+        task.queue_num = task_count;
         let order_hash = task.order_hash.clone();
         if !self.task_heap.read().await.contains_key(&order_hash) {
             self.task_heap.write().await.insert(order_hash.clone(), task);

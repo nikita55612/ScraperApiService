@@ -1,3 +1,4 @@
+use std::path::Path;
 use chrono::Local as LocalTime;
 use sha1::{Sha1, Digest};
 
@@ -19,4 +20,8 @@ pub fn sha1_hash(data: &[u8]) -> String {
     hasher.update(data);
     let res = hasher.finalize();
     hex::encode(res)
+}
+
+pub fn read_file<T: AsRef<Path>>(path: T) -> std::io::Result<String> {
+    std::fs::read_to_string(path)
 }
