@@ -5,6 +5,7 @@
     --background-color: #353535;
     --input-background-color: #2A2A2A;
     --code-highlight-string-color: #83a300;
+    --max-width: 872px;
 }
 
 body {
@@ -16,12 +17,17 @@ body {
 }
 
 header {
+    border-bottom: 1.5px ridge var(--text-color);
+    margin-bottom: 24px;
+}
+
+.inner-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 8px;
-    border-bottom: 1px solid var(--text-color);
-    margin-bottom: 16px;
+    max-width: var(--max-width);
+    margin: auto;
+    padding: 8px;
 }
 
 header span {
@@ -30,13 +36,12 @@ header span {
 }
 
 main {
-    max-width: 856px;
+    max-width: var(--max-width);
     margin: auto;
     padding: 0 8px;
 }
 
 .titel {
-    margin: 8px 0;
     font-family: monospace;
     font-size: 18px;
     text-decoration: none;
@@ -53,7 +58,7 @@ h3 {
     padding: 6px 0;
 }
 
-.underline {
+.uline {
     border-bottom: 1px solid var(--border-color);
 }
 
@@ -70,6 +75,19 @@ input[type=text]:focus {
     outline: none;
     background-color: var(--input-background-color);
     border: 2px solid var(--text-color);
+}
+
+input[type=file] {
+    display: none;
+}
+
+.file-upload-label {
+    display: block;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    color: var(--code-highlight-string-color);
+    font-weight: bold;
+    margin: 4px 0;
 }
 
 #token-input {
@@ -93,9 +111,13 @@ button:hover {
 }
 
 .request-body {
+    max-height: 320px;
     background-color: var(--input-background-color);
     border-radius: 11px;
     padding: 0px 12px;
+    overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.33) transparent;
 }
 
 .token.string {
@@ -124,7 +146,7 @@ button:hover {
     font-family: Arial, Helvetica, sans-serif;
 }
 
-.selected.open {
+.selected .open {
     border: 2px solid var(--text-color);
 }
 
