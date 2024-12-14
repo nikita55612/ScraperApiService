@@ -1,13 +1,13 @@
+#![allow(warnings)]
 use async_stream::stream;
 use tokio_stream::Stream;
 use super::models::{
-    Task, 
-    TaskProgress, 
+    Task,
+    TaskProgress,
     TaskStatus,
     TaskResult,
     ProductResult
 };
-
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use rand::seq::SliceRandom;
@@ -56,7 +56,7 @@ impl ProductData {
 
 pub fn task_stream(mut task: Task) -> impl Stream<Item = Task> {
 
-    let s = stream! {
+    let stream = stream! {
 
         task.init_progress();
         task.set_status(TaskStatus::Processing);
@@ -82,7 +82,7 @@ pub fn task_stream(mut task: Task) -> impl Stream<Item = Task> {
             yield task.clone();
         }
     };
-    Box::pin(s)
+    Box::pin(stream)
 }
 
 
@@ -95,7 +95,7 @@ fn select_random_product() -> &'static str {
         "Карманный голографический проектор",
         "Робот-пылесос с искусственным интеллектом",
         "Многофункциональная кухонная перчатка",
-        "Портативный очиститель воздуха", 
+        "Портативный очиститель воздуха",
         "Умная расческа с анализатором волос",
         "Bluetooth-наклейки для поиска вещей",
         "Водонепроницаемый планшет для душа",
@@ -159,4 +159,3 @@ fn select_random_marketplace_vendor() -> &'static str {
 
     vendors.choose(&mut thread_rng()).unwrap()
 }
-

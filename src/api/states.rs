@@ -1,33 +1,41 @@
+#![allow(warnings)]
 use std::{
-    collections::HashMap, 
+    collections::HashMap,
     sync::Arc
 };
 use sqlx::SqlitePool;
 use tokio::{
     sync::{
         mpsc::{
-            self, 
-            Receiver, 
+            self,
+            Receiver,
             Sender
-        }, 
+        },
         RwLock
-    }, 
+    },
     task::JoinHandle
 };
 use tokio_stream::StreamExt;
 use super::{
-    database as db, 
-    error::ApiError, 
-    models::{Order, Task, TaskStatus}, 
+    database as db,
+    error::ApiError,
+    models::{
+        Order,
+        Token,
+        Task,
+        TaskStatus
+    },
     stream::task_stream,
     config as cfg
 };
 
 
+type OrderHash = String;
+
 struct TaskHandler {
-    pub task_heap: Arc<RwLock<HashMap<String, Task>>>,
+    pub task_heap: Arc<RwLock<HashMap<OrderHash, Task>>>,
     pub queue_limit: u64,
-    pub sender: Sender<String>,
+    pub sender: Sender<OrderHash>,
     pub join_handle: JoinHandle<()>
 }
 
@@ -39,10 +47,10 @@ impl TaskHandler {
                 HashMap::with_capacity(queue_limit)
             )
         );
-        let (sender, receiver) = mpsc::channel::<String>(queue_limit);
+        let (sender, receiver) = mpsc::channel::<OrderHash>(queue_limit);
         let join_handle = Self::spawn_handler(
             db_pool,
-            receiver, 
+            receiver,
             task_heap.clone()
         ).await;
 
@@ -56,37 +64,37 @@ impl TaskHandler {
 
     async fn spawn_handler(
         db_pool: Arc<db::Pool>,
-        mut receiver: Receiver<String>, 
-        task_heap: Arc<RwLock<HashMap<String, Task>>>
+        mut receiver: Receiver<OrderHash>,
+        task_heap: Arc<RwLock<HashMap<OrderHash, Task>>>
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
-            while let Some(task_key) = receiver.recv().await {
-                let task = task_heap.read().await.get(&task_key).unwrap().clone();
+            while let Some(order_hash) = receiver.recv().await {
+                let task = task_heap.read().await.get(&order_hash).unwrap().clone();
                 let mut stream = task_stream(task.clone());
 
                 while let Some(task) = stream.next().await {
 
                     if matches!(task.status, TaskStatus::Completed | TaskStatus::Error) {
-                        if task_heap.write().await.remove(&task_key).is_some() {
+                        if task_heap.write().await.remove(&order_hash).is_some() {
                             task_heap.write().await.values_mut()
                                 .for_each(|t| t.queue_num -= 1);
                         }
 
                         let _ = db::insert_task(&db_pool, &task).await;
                     } else {
-                        task_heap.write().await.insert(task_key.clone(), task);
+                        task_heap.write().await.insert(order_hash.clone(), task);
                     }
                 }
             }
         })
     }
 
-    pub async fn registering_task(&self, mut task: Task) -> Result<String, ApiError> {
+    pub async fn registering_task(&self, mut task: Task) -> Result<OrderHash, ApiError> {
         let task_count = self.task_heap.read().await.len() as u64;
-        if task_count >= self.queue_limit { 
+        if task_count >= self.queue_limit {
             return Err(
                 ApiError::Info("task_count >= 10".into())
-            ); 
+            );
         }
         task.queue_num = task_count;
         let order_hash = task.order_hash.clone();
@@ -99,6 +107,11 @@ impl TaskHandler {
             return Ok(order_hash);
         }
         Err(ApiError::Info("not contains_key".into()))
+    }
+
+    pub async fn task_count_by_token(&self, token: &str) -> usize {
+        self.task_heap.read().await.values()
+            .filter(|t| t.order.token_id == token).count()
     }
 
     pub async fn contains_task(&self, key: &String) -> bool {
@@ -145,26 +158,31 @@ impl AppState {
         }
     }
 
-    pub async fn insert_order(&self, order: Order) -> Result<String, ApiError> {
+    pub async fn insert_order(&self, order: Order) -> Result<OrderHash, ApiError> {
         let task = Task::from_order(order);
         let handler_index = self.select_handler_index().await;
         self.task_handlers.get(handler_index).unwrap()
             .registering_task(task).await
     }
 
-    pub async fn get_task_state(&self, task_id: &String) -> Result<String, ApiError> {
+    pub async fn task_count_by_token(&self, token: &str) -> usize {
+        let mut task_count = 0_usize;
+        for handler in self.task_handlers.iter() {
+            task_count += handler.task_count_by_token(token).await;
+        }
+        task_count
+    }
+
+    pub async fn get_task_state(&self, order_hash: &String) -> Result<Task, ApiError> {
         for th in self.task_handlers.iter() {
-            if th.contains_task(task_id).await {
-                if let Some(task) = th.get_task(task_id).await {
-                    return Ok(
-                        serde_json::to_string(&task)
-                            .unwrap_or_default()
-                    );
+            if th.contains_task(order_hash).await {
+                if let Some(task) = th.get_task(order_hash).await {
+                    return Ok ( task );
                 }
                 return Err(ApiError::Unknown);
             }
         }
-        db::cutout_task(&self.db_pool, task_id).await
+        db::cutout_task(&self.db_pool, order_hash).await
             .map_err(|_| ApiError::Unknown)
     }
 

@@ -1,25 +1,35 @@
+#![allow(warnings)]
 use serde::{Serialize, Deserialize};
-use super::utils::{
+use super::super::utils::{
     gen_token_id,
     timestamp_now,
     sha1_hash
 };
 
 
-#[derive(Clone, Debug, PartialEq, sqlx::FromRow)]
+type OrderHash = String;
+
+
+#[derive(Clone, Debug, PartialEq, sqlx::FromRow, Serialize, Deserialize)]
 pub struct Token {
     pub id: String,
-    pub master: bool,
-    pub created_at: u64
+    pub created_at: u64,
+    pub ttl: u64,
+    pub ilimit: u64
 }
 
 impl Token {
-    pub fn new(master: bool) -> Self  {
+    pub fn new(ttl: u64, ilimit: u64) -> Self  {
         Self {
             id: gen_token_id(),
-            master: master,
-            created_at: timestamp_now()
+            created_at: timestamp_now(),
+            ttl,
+            ilimit
         }
+    }
+
+    pub fn is_expired(&self) -> bool {
+        (self.created_at + self.ttl) - timestamp_now() < 0
     }
 }
 
@@ -38,6 +48,7 @@ pub struct TaskProgress(u64, u64);
 //TEMP
 use super::stream::ProductData;
 use std::collections::HashMap;
+use std::default;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all="lowercase")]
@@ -59,11 +70,24 @@ pub enum OrderTypes {
     Products,
 }
 
-// Необходимо создать отдельную структуру для конфигурации закза
-// proxy_list должен входить в конфигурацию заказа
-#[derive(Serialize, Deserialize, Clone, Debug)]
+impl std::fmt::Display for OrderTypes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Products => write!(f, "products")
+        }
+    }
+}
+
+impl Default for OrderTypes {
+    fn default() -> Self {
+        Self::Products
+    }
+}
+
+// Можно сделать отдельную имплементацию для этой структуры вычисления sha1_hash необходимых полей
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Order {
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     pub token_id: String,
     #[serde(rename="type")]
     pub type_: OrderTypes,
@@ -71,12 +95,24 @@ pub struct Order {
     pub proxy_list: Vec<String>
 }
 
+impl Order {
+    fn sha1_hash(&self) -> OrderHash {
+        let order_hash_data = format!(
+            "{} {} {}",
+            self.token_id,
+            self.type_,
+            self.items.join(",")
+        );
+        sha1_hash(order_hash_data.as_bytes())
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Task {
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     pub order: Order,
-    #[serde(skip_serializing)]
-    pub order_hash: String,
+    #[serde(skip)]
+    pub order_hash: OrderHash,
     #[serde(rename="queueNum")]
     pub queue_num: u64,
     pub status: TaskStatus,
@@ -99,11 +135,10 @@ impl TaskProgress {
 
 impl Task {
     pub fn from_order(order: Order) -> Self {
-        let order_data = serde_json::to_string(&order).unwrap();
-        let order_hash = sha1_hash(order_data.as_bytes());
+        let order_hash = order.sha1_hash();
         Self {
             order: order,
-            order_hash: order_hash,
+            order_hash,
             queue_num: 0,
             status: TaskStatus::Waiting,
             progress: None,
@@ -161,4 +196,3 @@ impl Task {
         false
     }
 }
-

@@ -1,6 +1,8 @@
+#![allow(warnings)]
 use once_cell::sync::OnceCell;
 use serde::Deserialize;
-use super::utils::read_file;
+
+use super::super::utils::read_file;
 
 
 static INIT: OnceCell<Config> = OnceCell::new();
@@ -30,14 +32,20 @@ pub struct Config {
 
 #[derive(Deserialize, Debug)]
 pub struct Server {
-    pub addr: String,
+    pub host: String,
     pub port: u64
+}
+
+impl Server {
+    pub fn addr(&self) -> String {
+        format!("{}:{}", self.host, self.port)
+    }
 }
 
 #[derive(Deserialize, Debug)]
 pub struct Api {
     pub version: String,
-    pub order_limit_items: u64,
+    pub assets_path: String,
     pub db: String,
     pub db_max_conn: u32,
     pub task_handlers: u64,
@@ -47,7 +55,7 @@ pub struct Api {
 impl Default for Server {
     fn default() -> Self {
         Self {
-            addr: "0.0.0.0".into(),
+            host: "0.0.0.0".into(),
             port: 5500
         }
     }
@@ -57,7 +65,7 @@ impl Default for Api {
     fn default() -> Self {
         Self {
             version: "0.1.0".into(),
-            order_limit_items: 250,
+            assets_path: "assets".into(),
             db: "sqlite:scraper_api.db".into(),
             db_max_conn: 2,
             task_handlers: 1,

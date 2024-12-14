@@ -1,17 +1,17 @@
 pub mod database;
-pub mod routers;
 pub mod stream;
 pub mod config;
 pub mod models;
 pub mod states;
-pub mod utils;
 pub mod error;
+pub mod app;
 
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::Arc;
+    use crate::utils;
 
     #[tokio::test]
     async fn test_api() {
@@ -22,7 +22,7 @@ mod tests {
         );
         let app_state = states::AppState::new(db_pool, 1).await;
 
-        let mut task_id = String::new();
+        let mut order_hash = String::new();
 
         for n in 0..4 {
             tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
@@ -31,13 +31,13 @@ mod tests {
                 token_id: utils::gen_token_id(),
                 type_: models::OrderTypes::Products,
                 items: vec![
-                    "oz/1234567895".into(), 
+                    "oz/1234567895".into(),
                     "oz/1266647891".into(),
-                    "oz/9911784490".into(), 
+                    "oz/9911784490".into(),
                     "oz/7538788890".into(),
-                    "oz/1234567890".into(), 
+                    "oz/1234567890".into(),
                     "oz/1283567891".into(),
-                    "oz/8469967893".into(), 
+                    "oz/8469967893".into(),
                     "oz/7754767891".into(),
                     format!("oz/{}", utils::timestamp_now())
                     ],
@@ -49,19 +49,18 @@ mod tests {
             };
             println!("Order token_id: {}", order.token_id);
             match app_state.insert_order(order).await {
-                Ok(ti) => { task_id = ti; },
-                Err(e) => { 
-                    println!("{:?}", e); 
+                Ok(ti) => { order_hash = ti; },
+                Err(e) => {
+                    println!("{:?}", e);
                     panic!()
                 }
-            } 
+            }
         }
 
         loop {
-            match app_state.get_task_state(&task_id).await {
-                Ok(ts) => {
-                    let v = serde_json::from_str::<serde_json::Value>(&ts).unwrap();
-                    println!("{}", serde_json::to_string_pretty(&v).unwrap());
+            match app_state.get_task_state(&order_hash).await {
+                Ok(task) => {
+                    println!("{}", serde_json::to_string_pretty(&task).unwrap());
                 },
                 Err(_) => break
             }
