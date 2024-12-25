@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+browser_bridge = { path = "./browser_bridge" }
 axum = "0.7.9"
 tokio = { version = "1.41.1", features = ["full"] }
 tokio-stream = "0.1.16"
@@ -23,3 +24,4 @@ rand = "0.8.5"
 dotenv = "0.15.0"
 reqwest = "0.12.9"
 axum-macros = "0.4.2"
+scraper_dep = { package = "scraper", version = "0.22.0" }
