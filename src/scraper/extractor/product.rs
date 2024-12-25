@@ -1,51 +1,21 @@
-use scraper::Html;
-use std::fs;
-use std::io;
-use super::selectors;
 use serde_json::Value;
+use scraper_dep::Html;
+use std::collections::HashMap;
+
+use crate::models::scraper::{
+	ProductData,
+	Symbol
+};
+use super::selectors;
 
 
-#[derive(Clone, Debug, PartialEq, Default)]
-pub struct ProductData {
-    name: Option<String>,
-    price: Option<u64>,
-    cprice: Option<u64>,
-    seller: Option<String>,
-    seller_id: Option<String>,
-    img: Option<String>,
-    reviews: Option<u64>,
-    rating: Option<f64>,
-    brand: Option<String>,
-}
-
-impl ProductData {
-	pub fn is_empty(&self) -> bool {
-        [
-            self.name.is_none(),
-            self.price.is_none(),
-            self.cprice.is_none(),
-            self.seller.is_none(),
-            self.seller_id.is_none(),
-            self.img.is_none(),
-            self.reviews.is_none(),
-            self.rating.is_none(),
-            self.brand.is_none(),
-        ]
-        .iter()
-        .all(|is_none| *is_none)
+pub fn extract_data(symbol: Symbol, content: &str) -> Option<ProductData> {
+	match symbol {
+		Symbol::OZ => oz_extractor(content),
+		Symbol::WB => wb_extractor(content),
+		Symbol::YM => ym_extractor(content),
+		Symbol::MM => mm_extractor(content)
 	}
-
-	pub fn to_option(self) -> Option<ProductData> {
-		if self.is_empty() {
-			return None;
-		}
-
-		Some(self)
-	}
-}
-
-fn read_file_to_string(path: &str) -> io::Result<String> {
-    fs::read_to_string(path)
 }
 
 fn oz_extractor(content: &str) -> Option<ProductData> {
@@ -56,66 +26,85 @@ fn oz_extractor(content: &str) -> Option<ProductData> {
 		.map(|s| s.inner_html())
 		.and_then(|v| serde_json::from_str::<Value>(&v).ok())?;
 
-	let widget_states = json.get("widgetStates")?;
-	let tracking_info = json.get("layoutTrackingInfo");
+	let widget_states = json.get("widgetStates")
+		.and_then(|v| v.as_object())
+		.map(|v|
+			v.into_iter()
+			.filter(|(k, _)|
+				[
+					"webPrice-",
+					"webStickyProducts-",
+					"webGallery-",
+					"webReviewProductScore-",
+					"webBrand-",
+				]
+					.iter()
+					.any(|v| k.starts_with(v))
+			)
+			.map(|(k, v)| {
+					(
+						k.split_once('-')
+							.unwrap()
+							.0.to_string(),
+						v.as_str()
+							.and_then(|s| serde_json::from_str::<Value>(s).ok())
+					)
+				}
+			)
+			.filter(|(k, v)| v.is_some())
+			.map(|(k, v)| (k, v.unwrap()))
+			.collect::<HashMap<_, _>>()
+		)?;
 
 	let mut pd = ProductData::default();
 
-	for (key, value) in widget_states.as_object()? {
-		if let Some(value_str) = value.as_str() {
-			match key {
-				k if k.starts_with("webPrice-") => {
-					if let Ok(web_price) = serde_json::from_str::<Value>(value_str) {
-						pd.price = web_price.get("price")
-							.and_then(|v| v.as_str())
-							.and_then(|s| s.replace(['\u{2009}', '₽'], "").parse().ok());
-						pd.cprice = web_price.get("cardPrice")
-							.and_then(|v| v.as_str())
-							.and_then(|s| s.replace(['\u{2009}', '₽'], "").parse().ok());
-					}
-				},
-				k if k.starts_with("webStickyProducts-") => {
-					if let Ok(sticky_products) = serde_json::from_str::<Value>(value_str) {
-						pd.name = sticky_products.get("name")
-							.and_then(|v| v.as_str())
-							.map(str::trim)
-							.map(String::from);
-						if let Some(seller) = sticky_products.get("seller") {
-							pd.seller = seller.get("name")
-							.and_then(|v| v.as_str())
-							.map(str::trim)
-							.map(String::from);
-						pd.seller_id = seller.get("link")
-							.and_then(|v| v.as_str())
-							.and_then(|s| s.rsplit('/').nth(1))
-							.map(String::from);
-						}
-					}
-				},
+	if let Some(brand_widget) = widget_states.get("webBrand") {
+		pd.brand = brand_widget.get("content")
+			.and_then(|v| v.get("title"))
+			.and_then(|v| v.get("text"))
+			.and_then(|v| v.get(0))
+			.and_then(|v| v.get("content"))
+			.and_then(|v| v.as_str())
+			.map(String::from)
+	}
 
-				k if k.starts_with("webGallery-") => {
-					if let Ok(gallery) = serde_json::from_str::<Value>(value_str) {
-						pd.img = gallery.get("coverImage")
-							.and_then(|v| v.as_str())
-							.map(String::from);
-					}
-				},
+	if let Some(price_widget) = widget_states.get("webPrice") {
+		pd.price = price_widget.get("price")
+			.and_then(|v| v.as_str())
+			.and_then(|s| s.replace(['\u{2009}', '₽'], "").parse().ok());
+		pd.cprice = price_widget.get("cardPrice")
+			.and_then(|v| v.as_str())
+			.and_then(|s| s.replace(['\u{2009}', '₽'], "").parse().ok());
+	}
 
-				k if k.starts_with("webReviewProductScore") => {
-					if let Ok(review_product_score) = serde_json::from_str::<Value>(value_str) {
-						pd.reviews = review_product_score.get("reviewsCount").and_then(|v| v.as_u64());
-						pd.rating = review_product_score.get("totalScore").and_then(|v| v.as_f64());
-					}
-				},
-				_ => {}
-			}
+	if let Some(sticky_products_widget) = widget_states.get("webStickyProducts") {
+		pd.name = sticky_products_widget.get("name")
+			.and_then(|v| v.as_str())
+			.map(str::trim)
+			.map(String::from);
+		if let Some(seller) = sticky_products_widget.get("seller") {
+			pd.seller = seller.get("name")
+				.and_then(|v| v.as_str())
+				.map(str::trim)
+				.map(String::from);
+			pd.seller_id = seller.get("link")
+				.and_then(|v| v.as_str())
+				.and_then(|s| s.rsplit('/').nth(1))
+				.map(String::from);
 		}
 	}
 
-	if let Some(tracking_info) = tracking_info.and_then(|v| v.as_str()) {
-		if let Ok(tracking_data) = serde_json::from_str::<Value>(tracking_info) {
-			pd.brand = tracking_data.get("brandName").and_then(|v| v.as_str()).map(String::from);
-		}
+	if let Some(gallery_widget) = widget_states.get("webGallery") {
+		pd.img = gallery_widget.get("coverImage")
+			.and_then(|v| v.as_str())
+			.map(String::from);
+	}
+
+	if let Some(review_score_widget) = widget_states.get("webReviewProductScore") {
+		pd.reviews = review_score_widget.get("reviewsCount")
+			.and_then(|v| v.as_u64());
+		pd.rating = review_score_widget.get("totalScore")
+			.and_then(|v| v.as_f64());
 	}
 
 	pd.to_option()
@@ -321,7 +310,7 @@ mod tests {
 
 	#[test]
     fn test_ym_extractor() {
-        let html_string = read_file_to_string("samples/ym/3.html").unwrap();
+        let html_string = std::fs::read_to_string("samples/ym/3.html").unwrap();
 		let product_data = ym_extractor(&html_string).unwrap();
 
 		println!("{:#?}", product_data);
@@ -331,7 +320,7 @@ mod tests {
 
 	#[test]
     fn test_mm_extractor() {
-        let html_string = read_file_to_string("samples/mm/1.html").unwrap();
+        let html_string = std::fs::read_to_string("samples/mm/1.html").unwrap();
 		let product_data = mm_extractor(&html_string).unwrap();
 
 		println!("{:#?}", product_data);
@@ -341,7 +330,7 @@ mod tests {
 
 	#[test]
     fn test_wb_extractor() {
-        let html_string = read_file_to_string("samples/wb/1.json").unwrap();
+        let html_string = std::fs::read_to_string("samples/wb/1.json").unwrap();
 		let product_data = wb_extractor(&html_string).unwrap();
 
 		println!("{:#?}", product_data);
@@ -351,7 +340,7 @@ mod tests {
 
 	#[test]
     fn test_oz_extractor() {
-        let html_string = read_file_to_string("samples/oz/2.html").unwrap();
+        let html_string = std::fs::read_to_string("samples/oz/2.html").unwrap();
 		let product_data = oz_extractor(&html_string).unwrap();
 
 		println!("{:#?}", product_data);
