@@ -5,11 +5,11 @@ use sqlx::{
     SqlitePool,
     Sqlite,
 };
-use super::models::{
+use super::super::models::api::{
     Token,
     Task
 };
-use super::config as cfg;
+use super::super::config as cfg;
 
 
 type Result<T> = core::result::Result<T, sqlx::Error>;
@@ -150,7 +150,7 @@ mod tests {
     use super::*;
     use tokio::time::sleep;
     use std::time::Duration;
-    use crate::api::models;
+    use crate::models::api as models;
     use crate::utils;
 
 
@@ -221,8 +221,7 @@ mod tests {
     fn create_task() -> Task {
         let order = models::Order {
             token_id: utils::gen_token_id(),
-            type_: models::OrderTypes::Products,
-            items: vec![
+            products: vec![
                 "oz/1234567890".into(),
                 "oz/1234567891".into(),
                 "oz/9999967890".into(),
@@ -231,7 +230,8 @@ mod tests {
             proxy_list: vec![
                 "EyPrWhn4uZ:wN1qqx1gPH@178.255.30.223:11223".into(),
                 "DF3fdv4uZ:w3ER56bi1gRp@185.255.30.168:11223".into()
-                ]
+                ],
+            cookie_list: Vec::new()
         };
         Task::from_order(order)
     }

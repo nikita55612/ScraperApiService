@@ -19,14 +19,14 @@ use tokio_stream::StreamExt;
 use super::{
     database as db,
     error::ApiError,
-    models::{
+    super::models::api::{
         Order,
         Token,
         Task,
         TaskStatus
     },
     stream::task_stream,
-    config as cfg
+    super::config as cfg
 };
 
 
@@ -47,7 +47,10 @@ impl TaskHandler {
                 HashMap::with_capacity(queue_limit)
             )
         );
-        let (sender, receiver) = mpsc::channel::<OrderHash>(queue_limit);
+        let (
+            sender,
+            receiver
+        ) = mpsc::channel::<OrderHash>(queue_limit);
         let join_handle = Self::spawn_handler(
             db_pool,
             receiver,
