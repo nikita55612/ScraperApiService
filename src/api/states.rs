@@ -76,7 +76,6 @@ impl TaskHandler {
                 let mut stream = task_stream(task.clone());
 
                 while let Some(task) = stream.next().await {
-
                     if matches!(task.status, TaskStatus::Completed | TaskStatus::Error) {
                         if task_heap.write().await.remove(&order_hash).is_some() {
                             task_heap.write().await.values_mut()
@@ -96,7 +95,7 @@ impl TaskHandler {
         let task_count = self.task_heap.read().await.len() as u64;
         if task_count >= self.queue_limit {
             return Err(
-                ApiError::Info("task_count >= 10".into())
+                ApiError::HandlerQueueOverflow(self.queue_limit)
             );
         }
         task.queue_num = task_count;
@@ -105,11 +104,14 @@ impl TaskHandler {
             self.task_heap.write().await.insert(order_hash.clone(), task);
 
             if self.sender.send(order_hash.clone()).await.is_err() {
-                return Err(ApiError::Info("Sender Err".into()));
+                return Err(
+                    ApiError::TaskSendFailure
+                );
             }
             return Ok(order_hash);
         }
-        Err(ApiError::Info("not contains_key".into()))
+
+        Err (ApiError::TaskAlreadyExists(order_hash))
     }
 
     pub async fn task_count_by_token(&self, token: &str) -> usize {
@@ -186,7 +188,7 @@ impl AppState {
             }
         }
         db::cutout_task(&self.db_pool, order_hash).await
-            .map_err(|_| ApiError::Unknown)
+            .map_err(|_| ApiError::TaskNotFound)
     }
 
     async fn select_handler_index(&self) -> usize {

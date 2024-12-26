@@ -5,11 +5,12 @@ use sqlx::{
     SqlitePool,
     Sqlite,
 };
+
+use super::super::config as cfg;
 use super::super::models::api::{
     Token,
     Task
 };
-use super::super::config as cfg;
 
 
 type Result<T> = core::result::Result<T, sqlx::Error>;
@@ -17,17 +18,17 @@ pub type Pool = SqlitePool;
 
 
 pub async fn init() -> Result<Pool> {
-    let db = &cfg::get().api.db;
+    let db_path = &cfg::get().api.db_path;
 
-    if !Sqlite::database_exists(db).await? {
-        Sqlite::create_database(db).await?;
+    if !Sqlite::database_exists(db_path).await? {
+        Sqlite::create_database(db_path).await?;
     }
 
     let pool = SqlitePoolOptions::new()
         .max_connections(
             cfg::get().api.db_max_conn
         )
-        .connect(db)
+        .connect(db_path)
         .await?;
 
     sqlx::query(
