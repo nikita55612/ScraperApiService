@@ -4,10 +4,10 @@ use thiserror::Error as ThisError;
 
 #[derive(ThisError, Debug)]
 pub enum ScraperError {
-    #[error(r#"InvalidMP"#)]
-    InvalidMP,
+    #[error(r#"InvalidSymbol"#)]
+    InvalidSymbol,
     #[error(r#"InvalidProductId"#)]
     InvalidProductId,
-    #[error(r#"ParseProduct"#)]
-    ParseProduct,
+    #[error(r#"ParseProductError"#)]
+    ParseProductError,
 }
