@@ -1978,6 +1978,7 @@ dependencies = [
  "hex",
  "once_cell",
  "rand",
+ "regex",
  "reqwest",
  "scraper",
  "serde",

@@ -1,3 +1,7 @@
+env = [
+	["MASTER_TOKEN", "123"]
+]
+
 [server]
 host = "127.0.0.1"
 port = 5500
@@ -5,9 +9,71 @@ port = 5500
 [api]
 version = "0.1.0"
 assets_path = "assets"
-db = "sqlite:scraper_api.db"
+db_path = "sqlite:scraper_api.db"
 db_max_conn = 2
 task_handlers = 0
 handler_queue_limit = 21
 
-[scraper]
+#[scraper]
+
+[browser]
+# Optional configuration:
+# executable = ""
+# user_data_dir = ""
+
+# "DEFAULT" includes default arguments in the list:
+#	"--disable-background-networking",
+#   "--enable-features=NetworkService,NetworkServiceInProcess",
+#   "--disable-client-side-phishing-detection",
+#   "--disable-default-apps",
+#   "--disable-dev-shm-usage",
+#   "--disable-breakpad",
+#   "--disable-features=TranslateUI",
+#   "--disable-prompt-on-repost",
+#   "--no-first-run",
+#   "--disable-sync",
+#   "--force-color-profile=srgb",
+#   "--enable-blink-features=IdleDetection",
+#   "--lang=en_US",
+#   "--no-sandbox",
+#   "--disable-gpu",
+#   "--disable-smooth-scrolling",
+#   "--blink-settings=imagesEnabled=false",
+#   "--enable-lazy-image-loading",
+#   "--disable-image-animation-resync",
+#   "--disable-features=TranslateUI",
+#   "--disable-translate",
+#   "--disable-logging",
+#   "--disable-histogram-customizer"
+args = [
+	"DEFAULT"
+]
+# 0: Falsse, 1: True, 2: New
+headless_mod = 0
+sandbox = false
+extensions = []
+incognito = false
+# >= api.task_handlers
+available_ports = [
+	0,
+]
+launch_timeout = 1500
+request_timeout = 2000
+cache_enabled = true
+
+[browser.timings]
+launch_sleep = 280
+set_proxy_sleep = 180
+action_sleep = 80
+wait_page_timeout = 700
+
+[browser.page_param]
+stealth_mode = false
+rand_user_agent = false
+
+[browser.page_param.duration]
+base_ = 0
+oz = 0
+wb = 0
+ym = 0
+mm = 0
