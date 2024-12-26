@@ -1,9 +1,21 @@
 #![allow(warnings)]
-use std::{ffi::OsString, path::Path};
+use std::{ffi::OsString, net::TcpStream, path::Path};
 use chrono::Local as LocalTime;
 use rand::{seq::SliceRandom, thread_rng};
 use sha1::{Sha1, Digest};
 
+use super::config;
+
+
+fn print_logo() {
+    println!("{}", config::LOGO)
+}
+
+fn is_port_open(port: u16) -> bool {
+    TcpStream::connect(
+        (config::get().server.addr(), port)
+    ).is_ok()
+}
 
 pub fn timestamp_now() -> u64 {
     LocalTime::now().timestamp() as u64
