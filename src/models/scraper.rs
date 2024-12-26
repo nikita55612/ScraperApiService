@@ -186,7 +186,6 @@ pub struct Product {
 }
 
 impl Product {
-    // Реализовать from_string без валидачии и с валидацией
     pub fn from_string_with_valid(s: &str) -> Result<Self, ScraperError> {
         let (symbol, id) = s.split_once('/')
             .ok_or(ScraperError::ParseProductError)?;
@@ -199,7 +198,7 @@ impl Product {
                 .map_err(|_| ScraperError::InvalidProductId)?
                 .to_string(),
 
-                Symbol::MM => {
+            Symbol::MM => {
                 let _ = id.replacen('_', "", 1).parse::<u64>()
                     .map_err(|_| ScraperError::InvalidProductId)?;
                 id.to_string()
