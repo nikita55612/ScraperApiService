@@ -37,7 +37,8 @@ pub async fn init() -> Result<Pool> {
                 id TEXT PRIMARY KEY,
                 created_at INTEGER NOT NULL,
                 ttl INTEGER NOT NULL,
-                ilimit INTEGER NOT NULL
+                ilimit INTEGER NOT NULL,
+                climit INTEGER NOT NULL
             );"#
         )
         .execute(&pool)
@@ -145,6 +146,17 @@ pub async fn cutout_task(pool: &Pool, order_hash: &str) -> Result<Task> {
     Ok(serde_json::from_str(&task_data.0).unwrap())
 }
 
+pub async fn cutout_string_task(pool: &Pool, order_hash: &str) -> Result<String> {
+    let task_data: (String,) = sqlx::query_as(
+        "DELETE FROM completed_tasks WHERE id = ? RETURNING data"
+        )
+        .bind(order_hash)
+        .fetch_one(pool)
+        .await?;
+
+    Ok(task_data.0)
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -164,7 +176,7 @@ mod tests {
     #[tokio::test]
     async fn test_db_insert_token() {
         let pool = init().await.unwrap();
-        let token = Token::new(2592000, 250);
+        let token = Token::new(2592000, 250, 1);
         println!("{:?}", token);
         let insert_token_result = insert_token(
             &pool,
@@ -176,7 +188,7 @@ mod tests {
     #[tokio::test]
     async fn test_db_read_token() {
         let pool = init().await.unwrap();
-        let token = Token::new(2592000, 250);
+        let token = Token::new(2592000, 250, 1);
         println!("Insert token: {:?}", token);
         let _ = insert_token(
             &pool,
@@ -194,7 +206,7 @@ mod tests {
     #[tokio::test]
     async fn test_db_cutout_token() {
         let pool = init().await.unwrap();
-        let token = Token::new(2592000, 250);
+        let token = Token::new(2592000, 250, 1);
         println!("{:?}", token);
         let _ = insert_token(
             &pool,

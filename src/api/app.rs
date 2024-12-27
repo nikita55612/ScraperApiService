@@ -41,7 +41,8 @@ async fn init() -> Router {
     let app_state = Arc::new(
         AppState::new(
             db_pool,
-            cfg::get().api.task_handlers as usize
+            cfg::get().api.handlers_count,
+            cfg::get().api.handler_queue_limit
         ).await
     );
 
@@ -194,5 +195,59 @@ mod tests {
             ).unwrap()
         );
         assert_eq!(true, true);
+    }
+
+    #[tokio::test]
+    async fn test_api_order() {
+        run_server().await;
+
+        let client = reqwest::Client::new();
+        let response = client.post(
+                format!(
+                    "http://{}/order",
+                    cfg::get().server.addr()
+                )
+            )
+            .body(
+                r#"{
+  "tokenId": "abc123dadadadadadaxyz",
+  "products": [
+    "wb/121212121",
+    "oz/1212121233",
+    "ym/9999999999-12121-1212121"
+  ],
+  "proxyList": [
+    "GGR48S:12dsgb@147.45.62.117:8000",
+    "TT5bS:1QswfUb@176.34.52.124:8000"
+  ],
+  "cookieList": [
+    {
+      "name": "session",
+      "value": "session1234",
+      "domain": "example.com",
+      "path": "/",
+      "secure": true
+    },
+    {
+      "name": "user_pref",
+      "value": "dark_mode",
+      "domain": "example.com",
+      "path": "/",
+      "secure": false
+    }
+  ]
+}"#
+            )
+            .send()
+            .await
+            .unwrap();
+
+        println!("{:#?}", response);
+        println!(
+            "Response body: {:#?}",
+            serde_json::from_str::<serde_json::Value>(
+                &response.text().await.unwrap()
+            ).unwrap()
+        );
     }
 }

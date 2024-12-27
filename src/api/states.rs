@@ -40,8 +40,7 @@ struct TaskHandler {
 }
 
 impl TaskHandler {
-    pub async fn run(db_pool: Arc<SqlitePool>) -> Self {
-        let queue_limit = cfg::get().api.handler_queue_limit;
+    pub async fn run(db_pool: Arc<SqlitePool>, queue_limit: usize) -> Self {
         let task_heap = Arc::new(
             RwLock::new(
                 HashMap::with_capacity(queue_limit)
@@ -114,9 +113,9 @@ impl TaskHandler {
         Err (ApiError::TaskAlreadyExists(order_hash))
     }
 
-    pub async fn task_count_by_token(&self, token: &str) -> usize {
+    pub async fn task_count_by_token_id(&self, token_id: &str) -> usize {
         self.task_heap.read().await.values()
-            .filter(|t| t.order.token_id == token).count()
+            .filter(|t| t.order.token_id == token_id).count()
     }
 
     pub async fn contains_task(&self, key: &String) -> bool {
@@ -143,23 +142,30 @@ impl TaskHandler {
 pub struct AppState {
     pub db_pool: Arc<db::Pool>,
     pub task_handlers: Vec<TaskHandler>,
-    pub handlers_count: usize
+    pub handlers_count: usize,
+    pub handler_queue_limit: usize,
 }
 
 impl AppState {
-    pub async fn new(db_pool: Arc<db::Pool>, handlers_count: usize) -> Self {
+    pub async fn new(
+        db_pool: Arc<db::Pool>,
+        handlers_count: usize,
+        handler_queue_limit: usize
+    ) -> Self {
         let mut task_handlers = Vec::with_capacity(handlers_count);
         for _ in 0..handlers_count {
             task_handlers.push(
                 TaskHandler::run(
-                    db_pool.clone()
+                    db_pool.clone(),
+                    handler_queue_limit
                 ).await
             );
         }
         Self {
             db_pool,
             task_handlers,
-            handlers_count
+            handlers_count,
+            handler_queue_limit
         }
     }
 
@@ -170,10 +176,10 @@ impl AppState {
             .registering_task(task).await
     }
 
-    pub async fn task_count_by_token(&self, token: &str) -> usize {
+    pub async fn task_count_by_token_id(&self, token_id: &str) -> usize {
         let mut task_count = 0_usize;
         for handler in self.task_handlers.iter() {
-            task_count += handler.task_count_by_token(token).await;
+            task_count += handler.task_count_by_token_id(token_id).await;
         }
         task_count
     }

@@ -7,12 +7,14 @@ use std::{
 };
 use axum::{
     extract::{ConnectInfo, Path, Query, Request, State}, http::{
-        header,
-        StatusCode
+        header, HeaderMap, StatusCode
     }, response::{IntoResponse, Json, Response}, Router
 };
+use axum::body::Bytes;
 use axum_macros::debug_handler;
 use tower_http::services::ServeFile;
+
+use super::super::models::{api::Order, validation::Validation};
 
 use super::super::models::api::Token;
 use super::super::utils::list_dir;
@@ -43,9 +45,8 @@ pub fn assets() -> Router {
 	assets_router
 }
 
-fn extract_auth_header_from_request(req: &Request) -> Result<&str, ApiError> {
-    req
-        .headers()
+fn extract_auth_header_from_request(headers: &HeaderMap) -> Result<&str, ApiError> {
+    headers
         .get(header::AUTHORIZATION)
         .and_then(|header| header.to_str().ok())
         .ok_or(ApiError::AuthorizationHeaderMissing)
@@ -58,18 +59,34 @@ fn extract_token_from_auth_header(auth_header: &str) -> Result<&str, ApiError> {
     }
 }
 
-fn extract_token_from_request(req: &Request) -> Result<&str, ApiError> {
-    let auth_header = extract_auth_header_from_request(&req)?;
+fn extract_token_from_request(headers: &HeaderMap) -> Result<&str, ApiError> {
+    let auth_header = extract_auth_header_from_request(headers)?;
     extract_token_from_auth_header(auth_header)
 }
 
-fn verify_master_token(req: &Request) -> Result<(), ApiError> {
-    let master_token = extract_token_from_request(&req)?;
+fn verify_master_token(headers: &HeaderMap) -> Result<(), ApiError> {
+    let master_token = extract_token_from_request(headers)?;
     if master_token != get_master_token() {
         return Err(ApiError::InvalidMasterToken);
     }
 
     Ok(())
+}
+
+async fn verify_token(token_id: &str, db_pool: &db::Pool) -> Result<Token, ApiError> {
+    let token = db::read_token(
+        db_pool,
+        token_id
+    ).await?
+        .ok_or(ApiError::InvalidAuthorizationToken)?;
+
+    if token.is_expired() {
+        return Err(
+            ApiError::TokenLifetimeExceeded
+        );
+    }
+
+    Ok(token)
 }
 
 pub async fn hello_world() -> &'static str {
@@ -82,12 +99,12 @@ pub async fn myip(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> String {
 
 #[debug_handler]
 pub async fn create_new_token(
+    headers: HeaderMap,
     State(state): State<Arc<AppState>>,
     Query(query): Query<HashMap<String, String>>,
-    req: Request,
 ) -> Result<Response, ApiError> {
 
-    verify_master_token(&req)?;
+    verify_master_token(&headers)?;
 
     let new_token = Token::new(
         query.get("ttl").ok_or(
@@ -102,6 +119,12 @@ pub async fn create_new_token(
             .parse::<u64>().map_err(
                 |_| ApiError::InvalidUrlQueryParameter("ilimit".into())
             )?,
+        query.get("cplimit").ok_or(
+                ApiError::MissingUrlQueryParameter("cplimit".into())
+            )?
+            .parse::<u64>().map_err(
+                |_| ApiError::InvalidUrlQueryParameter("cplimit".into())
+            )?,
     );
 
     db::insert_token(&state.db_pool, &new_token).await?;
@@ -114,12 +137,12 @@ pub async fn create_new_token(
 
 #[debug_handler]
 pub async fn cutout_token(
+    headers: HeaderMap,
     State(state): State<Arc<AppState>>,
     Path(token_id): Path<String>,
-    req: Request,
 ) -> Result<Response, ApiError> {
 
-    verify_master_token(&req)?;
+    verify_master_token(&headers)?;
 
     let cutout_token = db::cutout_token(
         &state.db_pool,
@@ -137,11 +160,11 @@ pub async fn cutout_token(
 
 #[debug_handler]
 pub async fn token_info(
+    headers: HeaderMap,
     State(state): State<Arc<AppState>>,
-    req: Request,
 ) -> Result<Response, ApiError> {
 
-    let token_id = extract_token_from_request(&req)?;
+    let token_id = extract_token_from_request(&headers)?;
     let read_token = db::read_token(
         &state.db_pool,
         token_id
@@ -158,26 +181,42 @@ pub async fn token_info(
 
 #[debug_handler]
 pub async fn order(
+    headers: HeaderMap,
     State(state): State<Arc<AppState>>,
-    req: Request,
+    body: Bytes,
 ) -> Result<Response, ApiError> {
 
-    let token_id = extract_token_from_request(&req)?;
+    let token_id = extract_token_from_request(&headers)?;
+    let token = verify_token(token_id, &state.db_pool).await?;
 
-    // let _read_token = db::read_token(
-    //     &state.db_pool,
-    //     token_id
-    // ).await?;
+    let mut order = serde_json::from_slice::<Order>(&body)
+        .map_err(|_| ApiError::InvalidOrderFormat)?;
+    // Проверка пуст ли заказ. Внести другие элементы заказа при доступности
+    if order.products.is_empty() {
+        return Err(
+            ApiError::EmptyOrder
+        );
+    }
+    if order.products.len() > token.ilimit as usize {
+        return Err(
+            ApiError::OrderLimitExceeded(token.ilimit)
+        );
+    }
+    if state.task_count_by_token_id(token_id).await > token.climit as usize {
+        return Err(
+            ApiError::ConcurrencyLimitExceeded(token.climit)
+        );
+    }
+    order.validation()?;
 
-    // Поменять модель Order
-    // Вместо поля items сделать products
-    // Для парсинга других предметов добавить поля
-    // Необходимость в поле type_ отпадает
-    // Добавить больше кастомизации для парсинга (куки, заголовки, геолокация)
-    // Вопрос по геолокации (Как передавать и будет ли работать)
+    order.token_id = token_id.into();
+
+    println!("{:#?}", order);
+
+    let order_hash = state.insert_order(order).await?;
 
     Ok (
-        ( StatusCode::OK, "" ).into_response()
+        ( StatusCode::OK, format!(r#"{{ "order_hash": {} }}"#, order_hash) ).into_response()
     )
 }
 
