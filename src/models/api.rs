@@ -9,7 +9,7 @@ use super::super::utils::{
     timestamp_now,
     sha1_hash
 };
-use super::validation;
+use super::validation::Validation;
 
 
 type OrderHash = String;
@@ -21,16 +21,20 @@ pub struct Token {
 	#[serde(rename="createdAt")]
     pub created_at: u64,
     pub ttl: u64,
-    pub ilimit: u64
+    #[serde(rename="iLimit")]
+    pub ilimit: u64,
+    #[serde(rename="cLimit")]
+    pub climit: u64
 }
 
 impl Token {
-    pub fn new(ttl: u64, ilimit: u64) -> Self  {
+    pub fn new(ttl: u64, ilimit: u64, climit: u64) -> Self  {
         Self {
             id: gen_token_id(),
             created_at: timestamp_now(),
             ttl,
-            ilimit
+            ilimit,
+            climit
         }
     }
 
@@ -56,8 +60,9 @@ pub enum TaskResult {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(default)]
 pub struct Order {
-	#[serde(rename="tokenId")]
+	#[serde(skip)]
     pub token_id: String,
     pub products: Vec<String>,
 
@@ -68,13 +73,6 @@ pub struct Order {
 }
 
 impl Order {
-    fn validation(self) -> Result<Self, ApiError> {
-        for proxy in self.proxy_list.iter() {
-            validation::proxy_str_validation(proxy)?;
-        }
-        Ok(self)
-    }
-
     fn sha1_hash(&self) -> OrderHash {
         let order_hash_data = format!(
             "{} {}",
@@ -82,8 +80,17 @@ impl Order {
             self.products.join(",")
         );
 
-        sha1_hash(order_hash_data.as_bytes())
+        sha1_hash(
+            order_hash_data.as_bytes()
+        )
     }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct OrderExtractData {
+    pub products: Vec<String>,
+    pub proxy_list: Vec<String>,
+	pub cookie_list: Vec<OrderCookiesParam>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -141,6 +148,16 @@ impl Task {
                 HashMap::new()
             )
         )
+    }
+
+    pub fn extract_order_data(&mut self) -> OrderExtractData {
+        let extract_data = OrderExtractData {
+            products: std::mem::take(&mut self.order.products),
+            proxy_list: std::mem::take(&mut self.order.proxy_list),
+            cookie_list: std::mem::take(&mut self.order.cookie_list),
+        };
+
+        extract_data
     }
 
     pub fn insert_result_item(&mut self, k: String, v: Option<ProductData>) {

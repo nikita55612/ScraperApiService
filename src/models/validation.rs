@@ -4,6 +4,11 @@ use thiserror::Error;
 use std::net::IpAddr;
 use once_cell::sync::OnceCell;
 
+use super::{
+	api::Order,
+	scraper::Symbol
+};
+
 
 static PROXY_REGEX: OnceCell<Regex> = OnceCell::new();
 
@@ -15,31 +20,100 @@ fn get_proxy_regex() -> &'static Regex {
 	})
 }
 
-#[derive(Debug, Error)]
-pub enum ValidProxyError {
-    #[error("Invalid proxy format: '{0}'")]
-    InvalidFormat(String),
-    #[error("Invalid IP address: '{0}'")]
-    InvalidIp(String),
-    #[error("Invalid port number: '{0}'")]
-    InvalidPort(String),
+pub enum ValidationError {
+	Proxy(InvalidProxy),
+	Product(InvalidProduct)
 }
 
-pub fn proxy_str_validation(s: &str) -> Result<(), ValidProxyError> {
+#[derive(Debug, Error)]
+pub enum InvalidProxy {
+    #[error("Invalid proxy format: '{0}'")]
+    InvalidProxyFormat(String),
+    #[error("Invalid IP address: '{0}'")]
+    InvalidProxyIp(String),
+    #[error("Invalid port number: '{0}'")]
+    InvalidProxyPort(String),
+}
+
+#[derive(Debug, Error)]
+pub enum InvalidProduct {
+	#[error("Invalid product format: '{0}'")]
+    InvalidProductFormat(String),
+    #[error("Invalid product ID: '{0}'")]
+    InvalidProductId(String),
+    #[error("Invalid product symbol: '{0}'")]
+    InvalidProductSymbol(String),
+}
+
+pub trait Validation {
+	type Error: From<ValidationError>;
+
+	fn validation(&self) -> Result<(), Self::Error>;
+}
+
+impl Validation for Order {
+	type Error = ValidationError;
+
+	fn validation(&self) -> Result<(), Self::Error> {
+		for proxy in self.proxy_list.iter() {
+            proxy_str_validation(proxy)
+				.map_err(|e| ValidationError::Proxy(e))?;
+        }
+
+		for product in self.products.iter() {
+			product_str_validation(product)
+				.map_err(|e| ValidationError::Product(e))?;
+		}
+
+		Ok(())
+	}
+}
+
+fn proxy_str_validation(s: &str) -> Result<(), InvalidProxy> {
 	let caps = get_proxy_regex()
 		.captures(s)
-		.ok_or(ValidProxyError::InvalidFormat(s.into()))?;
+		.ok_or(InvalidProxy::InvalidProxyFormat(s.into()))?;
 
 	caps.name("host")
-		.ok_or(ValidProxyError::InvalidFormat(s.into()))?
+		.ok_or(InvalidProxy::InvalidProxyFormat(s.into()))?
 		.as_str()
 		.to_string()
 		.parse::<IpAddr>()
-		.map_err(|_| ValidProxyError::InvalidIp(s.into()))?;
+		.map_err(|_| InvalidProxy::InvalidProxyIp(s.into()))?;
 
 	caps.name("port")
 		.and_then(|m| m.as_str().parse::<u16>().ok())
-		.ok_or(ValidProxyError::InvalidPort(s.into()))?;
+		.ok_or(InvalidProxy::InvalidProxyPort(s.into()))?;
 
 	Ok(())
+}
+
+fn product_str_validation(s: &str) -> Result<(), InvalidProduct> {
+	let (symbol, id) = s.trim().split_once('/')
+		.ok_or(InvalidProduct::InvalidProductFormat(s.into()))?;
+
+	let symbol = Symbol::from_string(symbol)
+		.map_err(|_| InvalidProduct::InvalidProductSymbol(symbol.into()))?;
+
+	match symbol {
+		Symbol::OZ | Symbol::WB | Symbol::MM => id.parse::<u64>()
+			.map_err(|_| InvalidProduct::InvalidProductId(id.into()))
+			.map(|_| ()),
+
+		Symbol::YM => {
+			let parts = id.splitn(3, '-');
+			let conditions = parts.into_iter()
+				.map(|v| v.parse::<u64>().is_err()).collect::<Vec<_>>();
+			if conditions.len() != 3 {
+				return Err(InvalidProduct::InvalidProductId(id.into()));
+			}
+			if conditions.iter().any(|v| *v) {
+				return Err(InvalidProduct::InvalidProductId(id.into()));
+			}
+
+			Ok(())
+		}
+
+		_ => Ok(()),
+	}
 }

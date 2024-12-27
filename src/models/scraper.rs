@@ -151,7 +151,7 @@ pub enum Symbol {
 }
 
 impl Symbol {
-    fn from_string(s: &str) -> Result<Self, ScraperError> {
+    pub fn from_string(s: &str) -> Result<Self, ScraperError> {
         match s.to_lowercase().as_str() {
             "oz" => Ok(Self::OZ),
             "wb" => Ok(Self::WB),
@@ -161,7 +161,7 @@ impl Symbol {
         }
     }
 
-    fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             Self::OZ => "oz",
             Self::WB => "wb",
