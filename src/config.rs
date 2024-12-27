@@ -59,7 +59,7 @@ pub struct Api {
     pub assets_path: String,
     pub db_path: String,
     pub db_max_conn: u32,
-    pub task_handlers: u64,
+    pub handlers_count: usize,
     pub handler_queue_limit: usize
 }
 
@@ -120,7 +120,7 @@ impl Default for Api {
             assets_path: "assets".into(),
             db_path: "sqlite:scraper_api.db".into(),
             db_max_conn: 2,
-            task_handlers: 1,
+            handlers_count: 1,
             handler_queue_limit: 10
         }
     }
