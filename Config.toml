@@ -11,7 +11,7 @@ version = "0.1.0"
 assets_path = "assets"
 db_path = "sqlite:scraper_api.db"
 db_max_conn = 2
-task_handlers = 0
+handlers_count = 0
 handler_queue_limit = 21
 
 #[scraper]
