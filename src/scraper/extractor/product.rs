@@ -305,9 +305,6 @@ fn ym_extractor(content: &str) -> Option<ProductData> {
 mod tests {
 	use super::*;
 
-	// Добавить в конфигурацию возможность включения и отключения доступа к методу апи по токену доступа !!!!!!!!!
-
-
 	#[test]
     fn test_ym_extractor() {
         let html_string = std::fs::read_to_string("samples/ym/3.html").unwrap();
