@@ -3,13 +3,16 @@ use once_cell::sync::OnceCell;
 use serde::{Deserialize, Deserializer};
 
 use browser_bridge::{
-    BrowserSessionConfig,
-    BrowserTimings
+    chromiumoxide::{browser::HeadlessMode, handler::frame}, BrowserSessionConfig, BrowserTimings
 };
+
 use super::utils::read_file;
 
 
+
 static CFG: OnceCell<Config> = OnceCell::new();
+
+static BROWSER_SESSION_CFG: OnceCell<BrowserSessionConfig> = OnceCell::new();
 
 pub fn get() -> &'static Config {
     CFG.get_or_init(|| {
@@ -156,6 +159,44 @@ impl Default for DeBrowserTimings {
             action_sleep: default.action_sleep,
             wait_page_timeout: default.wait_page_timeout,
         }
+    }
+}
+
+impl From<DeBrowserTimings> for BrowserTimings {
+    fn from(value: DeBrowserTimings) -> Self {
+        Self {
+            launch_sleep: value.launch_sleep,
+            set_proxy_sleep: value.set_proxy_sleep,
+            action_sleep: value.action_sleep,
+            wait_page_timeout: value.wait_page_timeout,
+        }
+    }
+}
+
+impl Browser {
+    pub fn session_config(&self, port: u16) -> BrowserSessionConfig {
+        BROWSER_SESSION_CFG.get_or_init(|| {
+            BrowserSessionConfig {
+                executable: self.executable.clone(),
+                user_data_dir: self.user_data_dir.clone(),
+                args: self.args.clone(),
+                headless: {
+                    match self.headless_mod {
+                        0 => HeadlessMode::False,
+                        1 => HeadlessMode::True,
+                        _ => HeadlessMode::New
+                    }
+                },
+                sandbox: self.sandbox,
+                extensions: self.extensions.clone(),
+                incognito: self.incognito,
+                launch_timeout: self.launch_timeout,
+                request_timeout: self.request_timeout,
+                cache_enabled: self.cache_enabled,
+                timings: self.timings.clone().into(),
+                port
+            }
+        }).clone()
     }
 }
 
