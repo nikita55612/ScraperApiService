@@ -21,32 +21,24 @@ handler_queue_limit = 21
 # executable = ""
 # user_data_dir = ""
 
-# "DEFAULT" includes default arguments in the list:
-#	"--disable-background-networking",
-#   "--enable-features=NetworkService,NetworkServiceInProcess",
-#   "--disable-client-side-phishing-detection",
-#   "--disable-default-apps",
-#   "--disable-dev-shm-usage",
-#   "--disable-breakpad",
-#   "--disable-features=TranslateUI",
-#   "--disable-prompt-on-repost",
-#   "--no-first-run",
-#   "--disable-sync",
-#   "--force-color-profile=srgb",
-#   "--enable-blink-features=IdleDetection",
-#   "--lang=en_US",
-#   "--no-sandbox",
-#   "--disable-gpu",
-#   "--disable-smooth-scrolling",
-#   "--blink-settings=imagesEnabled=false",
-#   "--enable-lazy-image-loading",
-#   "--disable-image-animation-resync",
-#   "--disable-features=TranslateUI",
-#   "--disable-translate",
-#   "--disable-logging",
-#   "--disable-histogram-customizer"
+# DEFAULT ARGS:
+#    "--disable-blink-features=AutomationControlled",
+#    "--disable-default-apps",
+#    "--no-first-run",
+#    "--disable-sync",
+#    "--lang=en_US",
+#    "--no-default-browser-check",
+#    "--disable-smooth-scrolling",
+#    "--disable-features=TranslateUI"
 args = [
-	"DEFAULT"
+    "--disable-blink-features=AutomationControlled",
+    "--disable-default-apps",
+    "--no-first-run",
+    "--disable-sync",
+    "--lang=en_US",
+    "--no-default-browser-check",
+    "--disable-smooth-scrolling",
+    "--disable-features=TranslateUI"
 ]
 # 0: Falsse, 1: True, 2: New
 headless_mod = 0
