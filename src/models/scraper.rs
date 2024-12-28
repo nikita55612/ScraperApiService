@@ -186,43 +186,6 @@ pub struct Product {
 }
 
 impl Product {
-    pub fn from_string_with_valid(s: &str) -> Result<Self, ScraperError> {
-        let (symbol, id) = s.split_once('/')
-            .ok_or(ScraperError::ParseProductError)?;
-        let symbol = Symbol::from_string(symbol)?;
-
-
-
-        let id = match symbol {
-            Symbol::OZ | Symbol::WB => id.parse::<u64>()
-                .map_err(|_| ScraperError::InvalidProductId)?
-                .to_string(),
-
-            Symbol::MM => {
-                let _ = id.replacen('_', "", 1).parse::<u64>()
-                    .map_err(|_| ScraperError::InvalidProductId)?;
-                id.to_string()
-            },
-            _ => id.to_string(),
-        };
-
-        let url = match symbol {
-            Symbol::OZ => format!("https://www.ozon.ru/product/{}", id),
-            Symbol::WB => format!("https://www.wildberries.ru/catalog/{}/detail.aspx", id),
-            Symbol::YM => format!("https://www.podrygka.ru/catalog/{}-/", id),
-            Symbol::MM => format!("https://megamarket.ru/promo-page/details/#?slug={}", id),
-        };
-
-
-        Ok (
-            Self {
-                symbol,
-                id,
-                url
-            }
-        )
-    }
-
     pub fn from_string_without_valid(s: &str) -> Self {
         let (symbol, id) = s.split_once('/').unwrap();
         let symbol = Symbol::from_string(symbol).unwrap();
