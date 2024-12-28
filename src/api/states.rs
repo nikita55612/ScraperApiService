@@ -25,7 +25,7 @@ use super::{
         Task,
         TaskStatus
     },
-    stream::task_stream,
+    super::scraper::stream::task_stream,
     super::config as cfg
 };
 

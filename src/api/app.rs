@@ -14,8 +14,8 @@ use super::database as db;
 use super::routers;
 
 
-static MASTER_TOKEN: OnceCell<String> = OnceCell::new();
 const DEFAULT_MASTER_TOKEN: &'static str = "ARk9dD6EjWRylJ4i2cPbW3sOjw7TTY529sIDiRSpXmAEiRdJ5IKjaOfcRLAXM7Q6p5LJsYsaUyCVmJhZ6q0jXGK0Yd1r2WI1wLEB0AJcTqqj6g7FBcOY06q8kfXzcsrM";
+static MASTER_TOKEN: OnceCell<String> = OnceCell::new();
 
 pub fn get_master_token() -> &'static str {
     MASTER_TOKEN.get_or_init(|| {
