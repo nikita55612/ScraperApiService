@@ -19,7 +19,6 @@ handler_queue_limit = 21
 [browser]
 # Optional configuration:
 # executable = ""
-# user_data_dir = ""
 
 # DEFAULT ARGS:
 #    "--disable-blink-features=AutomationControlled",
@@ -46,9 +45,6 @@ sandbox = false
 extensions = []
 incognito = false
 # >= api.task_handlers
-available_ports = [
-	0,
-]
 launch_timeout = 1500
 request_timeout = 2000
 cache_enabled = true
