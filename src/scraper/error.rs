@@ -1,8 +1,8 @@
 #![allow(warnings)]
-use thiserror::Error as ThisError;
+use thiserror::Error;
 
 
-#[derive(ThisError, Debug)]
+#[derive(Error, Debug)]
 pub enum ScraperError {
     #[error(r#"InvalidSymbol"#)]
     InvalidSymbol,

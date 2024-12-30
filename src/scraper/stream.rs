@@ -1,17 +1,16 @@
-#![allow(warnings)]
+use std::collections::HashMap;
 use async_stream::stream;
 use tokio_stream::Stream;
+
 use super::super::models::{
     api::{
         Task,
         TaskProgress,
-        TaskStatus,
         TaskResult,
+        TaskStatus,
     },
-    scraper::ProductData
+    scraper::ProductData,
 };
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 
 pub fn task_stream(mut task: Task) -> impl Stream<Item = Task> {
