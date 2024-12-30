@@ -1,11 +1,14 @@
 #![allow(warnings)]
 use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
+use serde::{
+    Serialize,
+    Deserialize
+};
 
 use super::super::models::scraper::ProductData;
 use super::super::api::error::ApiError;
 use super::super::utils::{
-    gen_token_id,
+    create_token_id,
     timestamp_now,
     sha1_hash
 };
@@ -30,7 +33,7 @@ pub struct Token {
 impl Token {
     pub fn new(ttl: u64, ilimit: u64, climit: u64) -> Self  {
         Self {
-            id: gen_token_id(),
+            id: create_token_id(),
             created_at: timestamp_now(),
             ttl,
             ilimit,
@@ -68,6 +71,8 @@ pub struct Order {
 
 	#[serde(rename="proxyList")]
     pub proxy_list: Vec<String>,
+    #[serde(rename="proxyMap")]
+    pub proxy_map: HashMap<String, String>,
 	#[serde(rename="cookieList")]
 	pub cookie_list: Vec<OrderCookiesParam>,
 }

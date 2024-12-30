@@ -1,8 +1,13 @@
 #![allow(warnings)]
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use once_cell::sync::OnceCell;
+use serde::{
+    Deserialize,
+    Serialize
+};
 use rand::Rng;
+
+//use browser_bridge::chromiumoxide::cdp::browser_protocol::network::CookieParam;
 
 use super::super::scraper::error::ScraperError;
 use super::super::utils::{
@@ -141,7 +146,7 @@ impl ProductData {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all="lowercase")]
 pub enum Symbol {
     OZ,
@@ -215,12 +220,12 @@ impl Product {
     }
 }
 
-fn symbol_to_url(symbol: &Symbol, id: &str) -> String {
-    match symbol {
-        Symbol::OZ => format!("https://www.ozon.ru/product/{}", id),
-        Symbol::WB => format!("https://www.wildberries.ru/catalog/{}/detail.aspx", id),
-        Symbol::YM => format!("https://www.podrygka.ru/catalog/{}-/", id),
-        Symbol::MM => format!("https://megamarket.ru/promo-page/details/#?slug={}", id),
-        _ => String::new(),
-    }
-}
+// fn symbol_to_url(symbol: &Symbol, id: &str) -> String {
+//     match symbol {
+//         Symbol::OZ => format!("https://www.ozon.ru/product/{}", id),
+//         Symbol::WB => format!("https://www.wildberries.ru/catalog/{}/detail.aspx", id),
+//         Symbol::YM => format!("https://www.podrygka.ru/catalog/{}-/", id),
+//         Symbol::MM => format!("https://megamarket.ru/promo-page/details/#?slug={}", id),
+//         _ => String::new(),
+//     }
+// }

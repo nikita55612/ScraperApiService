@@ -1,12 +1,12 @@
 #![allow(warnings)]
-use regex::Regex;
-use thiserror::Error;
 use std::net::IpAddr;
 use once_cell::sync::OnceCell;
+use regex::Regex;
+use thiserror::Error;
 
 use super::{
+	scraper::Symbol,
 	api::Order,
-	scraper::Symbol
 };
 
 
@@ -33,6 +33,8 @@ pub enum InvalidProxy {
     InvalidProxyIp(String),
     #[error("Invalid port number: '{0}'")]
     InvalidProxyPort(String),
+	#[error("Invalid proxy symbol: '{0}'")]
+    InvalidProxySymbol(String),
 }
 
 #[derive(Debug, Error)]
@@ -56,6 +58,15 @@ impl Validation for Order {
 
 	fn validation(&self) -> Result<(), Self::Error> {
 		for proxy in self.proxy_list.iter() {
+            proxy_str_validation(proxy)
+				.map_err(|e| ValidationError::Proxy(e))?;
+        }
+
+		for (symbol, proxy) in self.proxy_map.iter() {
+			Symbol::from_string(symbol)
+				.map_err(|_| ValidationError::Proxy(
+					InvalidProxy::InvalidProxySymbol(symbol.into())
+				))?;
             proxy_str_validation(proxy)
 				.map_err(|e| ValidationError::Proxy(e))?;
         }
