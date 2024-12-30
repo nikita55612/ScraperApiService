@@ -20,7 +20,13 @@ mod api;
 // Реализовать модуль reqwest в модуле scraper. Модуль запроса ProductData
 // Добавить создание файла конфигурации по умолчанию если его нет
 // * Перенести модуль stream из модуля api в модуль scraper
+// user_data_dir
+
+fn init() {
+    println!("{}", config::LOGO)
+}
 
 fn main() {
+    init();
     println!("Hello, world!");
 }

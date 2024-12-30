@@ -1,13 +1,18 @@
 #![allow(warnings)]
 use once_cell::sync::OnceCell;
-use serde::{Deserialize, Deserializer};
-
-use browser_bridge::{
-    chromiumoxide::{browser::HeadlessMode, handler::frame}, BrowserSessionConfig, BrowserTimings
+use serde::{
+    Deserialize,
+    Deserializer,
 };
-
 use super::utils::read_file;
-
+use browser_bridge::{
+    chromiumoxide::{
+        browser::HeadlessMode,
+        handler::frame,
+    },
+    BrowserSessionConfig,
+    BrowserTimings,
+};
 
 
 static CFG: OnceCell<Config> = OnceCell::new();
@@ -67,15 +72,13 @@ pub struct Api {
 }
 
 #[derive(Deserialize, Debug, Clone)]
-struct Browser {
+pub struct Browser {
     pub executable: Option<String>,
-    pub user_data_dir: Option<String>,
     pub args: Vec<String>,
     pub headless_mod: u8,
     pub sandbox: bool,
     pub extensions: Vec<String>,
     pub incognito: bool,
-    pub available_ports: Vec<u16>,
     pub launch_timeout: u64,
     pub request_timeout: u64,
     pub cache_enabled: bool,
@@ -134,13 +137,11 @@ impl Default for Browser {
         let default = BrowserSessionConfig::default();
         Self {
             executable: default.executable,
-            user_data_dir: default.user_data_dir,
             args: default.args,
             headless_mod: 0,
             sandbox: default.sandbox,
             extensions: default.extensions,
             incognito: default.incognito,
-            available_ports: vec![0],
             launch_timeout: default.launch_timeout,
             request_timeout: default.request_timeout,
             cache_enabled: default.cache_enabled,
@@ -174,29 +175,33 @@ impl From<DeBrowserTimings> for BrowserTimings {
 }
 
 impl Browser {
-    pub fn session_config(&self, port: u16) -> BrowserSessionConfig {
-        BROWSER_SESSION_CFG.get_or_init(|| {
-            BrowserSessionConfig {
-                executable: self.executable.clone(),
-                user_data_dir: self.user_data_dir.clone(),
-                args: self.args.clone(),
-                headless: {
-                    match self.headless_mod {
-                        0 => HeadlessMode::False,
-                        1 => HeadlessMode::True,
-                        _ => HeadlessMode::New
-                    }
-                },
-                sandbox: self.sandbox,
-                extensions: self.extensions.clone(),
-                incognito: self.incognito,
-                launch_timeout: self.launch_timeout,
-                request_timeout: self.request_timeout,
-                cache_enabled: self.cache_enabled,
-                timings: self.timings.clone().into(),
-                port
-            }
-        }).clone()
+    pub fn session_config(&self, port: u16, user_data_dir: String) -> BrowserSessionConfig {
+        let mut session_config = BROWSER_SESSION_CFG
+            .get_or_init(|| {
+                BrowserSessionConfig {
+                    executable: self.executable.clone(),
+                    args: self.args.clone(),
+                    headless: {
+                        match self.headless_mod {
+                            0 => HeadlessMode::False,
+                            1 => HeadlessMode::True,
+                            _ => HeadlessMode::New
+                        }
+                    },
+                    sandbox: self.sandbox,
+                    extensions: self.extensions.clone(),
+                    incognito: self.incognito,
+                    launch_timeout: self.launch_timeout,
+                    request_timeout: self.request_timeout,
+                    cache_enabled: self.cache_enabled,
+                    timings: self.timings.clone().into(),
+                    ..Default::default()
+                }
+        }).clone();
+        session_config.port = port;
+        session_config.user_data_dir = Some(user_data_dir);
+
+        session_config
     }
 }
 

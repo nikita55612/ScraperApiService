@@ -1,17 +1,26 @@
 #![allow(warnings)]
-use std::{ffi::OsString, net::TcpStream, path::Path};
+use std::{
+    ffi::OsString,
+    net::TcpStream,
+    path::Path,
+};
 use chrono::Local as LocalTime;
-use rand::{seq::SliceRandom, thread_rng};
-use sha1::{Sha1, Digest};
+use rand::{
+    distributions::Alphanumeric, seq::SliceRandom, thread_rng, Rng
+};
+use sha1::{
+    Digest,
+    Sha1,
+};
 
 use super::config;
 
 
-fn print_logo() {
+pub fn print_logo() {
     println!("{}", config::LOGO)
 }
 
-fn is_port_open(port: u16) -> bool {
+pub fn is_port_open(port: u16) -> bool {
     TcpStream::connect(
         (config::get().server.addr(), port)
     ).is_ok()
@@ -21,12 +30,20 @@ pub fn timestamp_now() -> u64 {
     LocalTime::now().timestamp() as u64
 }
 
-pub fn gen_uuid() -> String {
-    uuid::Uuid::new_v4().simple().to_string()
+fn random_string(len: usize) -> String {
+    let mut rng = thread_rng();
+    (0..len)
+        .map(|_| rng.sample(Alphanumeric) as char)
+        .collect()
 }
 
-pub fn gen_token_id() -> String {
-    format!("ss.{}", gen_uuid())
+pub fn create_uuid() -> String {
+    uuid::Uuid::new_v4().simple()
+        .to_string()
+}
+
+pub fn create_token_id() -> String {
+    format!("rs.{}", random_string(33))
 }
 
 pub fn sha1_hash(data: &[u8]) -> String {
@@ -176,8 +193,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_list_dir() {
-        println!("{:#?}", list_dir("assets"));
+    fn test_create_token_id() {
+        for _ in (0..100) {
+            println!("{}", create_token_id());
+        }
         assert_eq!(true, true);
     }
 }
