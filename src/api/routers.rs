@@ -1,22 +1,38 @@
 #![allow(warnings)]
 use std::{
-	collections::HashMap,
-	path::Path as OsPath,
-	net::SocketAddr,
-	sync::Arc
+    collections::HashMap,
+    net::SocketAddr,
+    path::Path as OsPath,
+    sync::Arc,
 };
 use axum::{
-    extract::{ConnectInfo, Path, Query, Request, State}, http::{
-        header, HeaderMap, StatusCode
-    }, response::{IntoResponse, Json, Response}, Router
+    body::Bytes,
+    extract::{
+        ConnectInfo,
+        Path,
+        Query,
+        Request,
+        State,
+    },
+    http::{
+        header,
+        HeaderMap,
+        StatusCode,
+    },
+    response::{
+        IntoResponse,
+        Json,
+        Response,
+    },
+    Router,
 };
-use axum::body::Bytes;
-use axum_macros::debug_handler;
 use tower_http::services::ServeFile;
+use axum_macros::debug_handler;
 
-use super::super::models::{api::Order, validation::Validation};
-
-use super::super::models::api::Token;
+use super::super::models::{
+    api::{Order, Token},
+    validation::Validation
+};
 use super::super::utils::list_dir;
 use super::app::get_master_token;
 use super::super::config as cfg;

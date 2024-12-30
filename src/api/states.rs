@@ -1,7 +1,7 @@
 #![allow(warnings)]
 use std::{
     collections::HashMap,
-    sync::Arc
+    sync::Arc,
 };
 use sqlx::SqlitePool;
 use tokio::{
@@ -9,11 +9,11 @@ use tokio::{
         mpsc::{
             self,
             Receiver,
-            Sender
+            Sender,
         },
-        RwLock
+        RwLock,
     },
-    task::JoinHandle
+    task::JoinHandle,
 };
 use tokio_stream::StreamExt;
 use super::{
@@ -21,12 +21,12 @@ use super::{
     error::ApiError,
     super::models::api::{
         Order,
-        Token,
         Task,
-        TaskStatus
+        TaskStatus,
+        Token,
     },
     super::scraper::stream::task_stream,
-    super::config as cfg
+    super::config as cfg,
 };
 
 
@@ -114,8 +114,11 @@ impl TaskHandler {
     }
 
     pub async fn task_count_by_token_id(&self, token_id: &str) -> usize {
-        self.task_heap.read().await.values()
-            .filter(|t| t.order.token_id == token_id).count()
+        self.task_heap.read()
+            .await
+            .values()
+            .filter(|t| t.order.token_id == token_id)
+            .count()
     }
 
     pub async fn contains_task(&self, key: &String) -> bool {
@@ -123,11 +126,16 @@ impl TaskHandler {
     }
 
     pub async fn get_task(&self, key: &String) -> Option<Task> {
-        self.task_heap.read().await.get(key).map(|t| t.clone())
+        self.task_heap.read()
+            .await.get(key)
+            .map(|t| t.clone())
     }
 
     pub async fn with_task<R>(&self, key: &String, f: impl FnOnce(&Task) -> R) -> Option<R> {
-        self.task_heap.read().await.get(key).map(f)
+        self.task_heap.read()
+            .await
+            .get(key)
+            .map(f)
     }
 
     pub async fn len(&self) -> usize {
@@ -172,6 +180,7 @@ impl AppState {
     pub async fn insert_order(&self, order: Order) -> Result<OrderHash, ApiError> {
         let task = Task::from_order(order);
         let handler_index = self.select_handler_index().await;
+
         self.task_handlers.get(handler_index).unwrap()
             .registering_task(task).await
     }
@@ -181,6 +190,7 @@ impl AppState {
         for handler in self.task_handlers.iter() {
             task_count += handler.task_count_by_token_id(token_id).await;
         }
+
         task_count
     }
 
@@ -193,6 +203,7 @@ impl AppState {
                 return Err(ApiError::Unknown);
             }
         }
+
         db::cutout_task(&self.db_pool, order_hash).await
             .map_err(|_| ApiError::TaskNotFound)
     }
@@ -201,7 +212,7 @@ impl AppState {
         if self.handlers_count == 1 {
             return 0;
         }
-        let mut task_handlers_queue: Vec<usize> = Vec::with_capacity(
+        let mut task_handlers_queue = Vec::with_capacity(
             self.handlers_count
         );
         for th in self.task_handlers.iter() {
@@ -209,11 +220,11 @@ impl AppState {
                 th.len().await
             );
         }
+
         task_handlers_queue.iter()
             .enumerate()
             .min_by_key(|(_, value)| *value)
-            .unwrap_or(
-                (0, &0)
-            ).0
+            .unwrap_or((0, &0))
+            .0
     }
 }

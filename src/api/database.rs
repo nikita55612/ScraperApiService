@@ -162,6 +162,7 @@ pub async fn cutout_string_task(pool: &Pool, order_hash: &str) -> Result<String>
 mod tests {
     use super::*;
     use tokio::time::sleep;
+    use std::collections::HashMap;
     use std::time::Duration;
     use crate::models::api as models;
     use crate::utils;
@@ -233,7 +234,7 @@ mod tests {
 
     fn create_task() -> Task {
         let order = models::Order {
-            token_id: utils::gen_token_id(),
+            token_id: utils::create_token_id(),
             products: vec![
                 "oz/1234567890".into(),
                 "oz/1234567891".into(),
@@ -244,6 +245,7 @@ mod tests {
                 "EyPrWhn4uZ:wN1qqx1gPH@178.255.30.223:11223".into(),
                 "DF3fdv4uZ:w3ER56bi1gRp@185.255.30.168:11223".into()
                 ],
+            proxy_map: HashMap::new(),
             cookie_list: Vec::new()
         };
         Task::from_order(order)
