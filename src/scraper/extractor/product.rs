@@ -1,6 +1,6 @@
+use std::collections::HashMap;
 use serde_json::Value;
 use scraper_dep::Html;
-use std::collections::HashMap;
 
 use crate::models::scraper::{
 	ProductData,
