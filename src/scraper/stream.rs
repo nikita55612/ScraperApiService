@@ -2,29 +2,49 @@ use std::collections::HashMap;
 use async_stream::stream;
 use tokio_stream::Stream;
 
-use super::super::models::{
-    api::{
-        Task,
-        TaskProgress,
-        TaskResult,
-        TaskStatus,
+use super::{
+    req::{
+        ReqSession,
+        ReqMethod
     },
-    scraper::ProductData,
+    super::models::{
+        scraper::ProductData,
+        api::{
+            Task,
+            TaskProgress,
+            TaskResult,
+            TaskStatus
+        }
+    }
 };
 
 
-pub fn task_stream(mut task: Task) -> impl Stream<Item = Task> {
+//fn task_handler(mut task: Task) -> Task {
+
+//}
+
+pub async fn task_stream(mut task: Task) -> impl Stream<Item = Task> {
+    let order_data = task.extract_order_data();
+    let req_session = ReqSession::new(
+        ReqMethod::Combined,
+        &order_data.cookies,
+        order_data.proxy_pool
+    ).await;
+
+    match req_session {
+        Ok(rs) => {
+            task.init_progress();
+            task.set_status(TaskStatus::Processing);
+            task.init_result_data();
+        },
+        Err(e) => {
+            task.set_status(TaskStatus::Error);
+            task.set_result_error(e.to_string());
+        }
+    };
 
     let stream = stream! {
-
-        task.init_progress();
-        task.set_status(TaskStatus::Processing);
-        task.init_result_data();
-        let order_data = task.extract_order_data();
-
         while !matches!(task.status, TaskStatus::Completed | TaskStatus::Error) {
-
-            tokio::time::sleep(tokio::time::Duration::from_millis(120)).await;
 
             let order_item = order_data.products.get(
                 task.get_curr_step() as usize
@@ -40,7 +60,9 @@ pub fn task_stream(mut task: Task) -> impl Stream<Item = Task> {
                 task.set_status(TaskStatus::Completed);
             }
             yield task.clone();
+
         }
+        yield task;
     };
     Box::pin(stream)
 }

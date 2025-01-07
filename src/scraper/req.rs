@@ -1,17 +1,39 @@
-use once_cell::sync::OnceCell;
-use browser_bridge::{
-	random_user_agent, BrowserError, BrowserSession, BrowserSessionConfig, PageParam
+use once_cell::sync::{Lazy, OnceCell};
+use std::{
+	collections::HashMap, sync::Arc, thread::panicking, time::Duration
 };
-use serde_json::map;
-use tokio::sync::Mutex;
+use browser_bridge::{
+	random_user_agent,
+	BrowserError,
+	BrowserSession,
+	BrowserSessionConfig,
+	PageParam,
+	chromiumoxide::cdp::browser_protocol::network::{
+		CookieParam as BrowserCookieParam,
+		CookieSameSite as BrowserCookieSameSite
+	}
+};
+use tokio::{
+	time::sleep,
+	sync::Mutex
+};
+use reqwest::cookie::{Cookie, Jar};
 
-use crate::models::{api::OrderCookiesParam, scraper::{Product, ProductData, Symbol}};
+use super::{
+	error::ReqSessionError,
+	extractor::product::extract_data,
+	super::{
+		config as cfg,
+		utils::is_port_open,
+		models::{
+			api::OrderCookieParam,
+			scraper::{Product, ProductData, Symbol},
+			validation::ProxyParam
+		}
+	},
+};
 
-use super::{super::config as cfg, extractor::product::extract_data};
-use super::super::utils::is_port_open;
-
-// ЭТО БАЗА
-
+#[derive(Clone, Debug)]
 struct BrowserState {
 	port: u16,
 	user_data_dir: String,
@@ -28,12 +50,15 @@ impl BrowserState {
 	}
 }
 
+#[derive(Debug)]
 struct BrowserStates(Mutex<Vec<BrowserState>>);
 
 impl BrowserStates {
 	async fn launch_browser_session(&self) -> Result<Browser, BrowserError> {
 		let mut lock_states = self.0.lock().await;
-		let (config, port) = if let Some(state) = lock_states
+		let (config, port) = if let Some(
+			state
+		) = lock_states
 			.iter_mut()
 			.find(|state| !state.running)
 		{
@@ -62,24 +87,29 @@ impl BrowserStates {
 
 static BROWSER_STATES: OnceCell<BrowserStates> = OnceCell::new();
 
-// Как  то настроить чтобы порты брались не из available_ports а автоматически подбирались доступные
 pub fn get_browser_states() -> &'static BrowserStates {
     BROWSER_STATES.get_or_init(|| {
 		let mut states = Vec::with_capacity(
-			cfg::get().api.handlers_count
+			cfg::get().api.handlers_count + 2
 		);
-		let port = (cfg::get().server.port + 1) as u16;
+		let mut port = (cfg::get().server.port + 1) as u16;
 		while states.len() < states.capacity() {
 			if is_port_open(port) {
+				let temp_dir = tempfile::tempdir_in(
+					&cfg::get().browser.users_temp_data_dir
+				).expect("Create temp dir error");
 				states.push(
 					BrowserState {
 						port,
-						// Инициализация временных директорий
-						user_data_dir: String::new(),
+						user_data_dir: temp_dir.path()
+							.to_str()
+							.map(String::from)
+							.expect("Temp dir to string error"),
 						running: false
 					}
 				);
 			}
+			port += 1;
 		}
 
 		BrowserStates(
@@ -88,14 +118,50 @@ pub fn get_browser_states() -> &'static BrowserStates {
 	})
 }
 
-enum ReqwestError {
-	Browser(String),
-}
+static DEFAULT_PAGE_PARAM: Lazy<PageParam<'static>> = Lazy::new(|| PageParam::default());
+static PRODUCT_PAGE_PARAMS: OnceCell<HashMap<String, PageParam>> = OnceCell::new();
 
-impl From<BrowserError> for ReqwestError {
-	fn from(value: BrowserError) -> Self {
-		Self::Browser(value.to_string())
-	}
+pub fn get_product_page_param(symbol: &str) -> &'static PageParam {
+    PRODUCT_PAGE_PARAMS.get_or_init(|| {
+		let cfg_page_param = &cfg::get()
+			.browser
+			.page_param;
+		let wait_el_timeout = cfg_page_param.wait_for_element_timeout;
+		let wait_for_element = |s: &str| {
+			cfg_page_param
+				.symbol
+				.get(s)
+				.and_then(|v|
+					v.wait_for_product_element
+						.as_ref()
+						.map(|v| (v.as_str(), wait_el_timeout))
+				)
+		};
+		HashMap::from([
+				(
+					Symbol::OZ.as_str().into(),
+					PageParam {
+						wait_for_element: wait_for_element(Symbol::OZ.as_str()),
+						..Default::default()
+					}
+				),
+				(
+					Symbol::YM.as_str().into(),
+					PageParam {
+						wait_for_element: wait_for_element(Symbol::YM.as_str()),
+						..Default::default()
+					}
+				),
+				(
+					Symbol::MM.as_str().into(),
+					PageParam {
+						wait_for_element: wait_for_element(Symbol::MM.as_str()),
+						..Default::default()
+					}
+				)
+		])
+	}).get(symbol)
+		.unwrap_or(&*DEFAULT_PAGE_PARAM)
 }
 
 struct Browser {
@@ -103,128 +169,280 @@ struct Browser {
 	session: BrowserSession
 }
 
-struct Client {
-	browser: Browser,
-	reqwest_client: reqwest::Client,
-	// Передача конфигурации запросов (список прокси, куки итд)
-	reqwest_config: bool,
-	cookies: Vec<OrderCookiesParam>,
-	// Количество запросов за сессию
-	reqwest_count: usize
+pub enum ReqMethod {
+	Combined,
+	Browser,
+	Reqwest,
 }
 
-impl Client {
-	async fn new(cookies: Vec<OrderCookiesParam>) -> Result<Self, BrowserError> {
-		let browser_states = get_browser_states();
-		let browser = browser_states
-			.launch_browser_session()
-			.await?;
+pub struct ReqSession {
+	browser: Option<Browser>,
+	req_client: Option<reqwest::Client>,
+	proxy_pool: Vec<String>,
+	set_proxy_interval: u8,
+	req_count: usize
+}
 
-		let reqwest_client = reqwest::Client::new();
+impl ReqSession {
+	pub async fn new(
+
+		method: ReqMethod,
+		cookies: &Vec<OrderCookieParam>,
+		proxy_pool: Vec<String>
+
+	) -> Result<Self, ReqSessionError> {
+		let req_client = if matches!(
+			method, ReqMethod::Reqwest | ReqMethod::Combined
+		) {
+			let jar = Arc::new(Jar::default());
+			for cookie in cookies {
+				let url = cookie.url.as_str()
+					.parse::<reqwest::Url>();
+				if url.is_err() { continue; };
+				let cookie_str = format!(
+					"name={}; value={}; domain={}; path={}; secure={}; httpOnly={}; sameSite={}",
+					cookie.name.as_str(),
+					cookie.value.as_str(),
+					cookie.domain.as_ref().unwrap_or(&"".into()),
+					cookie.path.as_ref().unwrap_or(&"".into()),
+					cookie.secure.as_ref().map(|v| if *v {"true"} else {"false"}).unwrap_or(""),
+					cookie.http_only.as_ref().map(|v| if *v {"true"} else {"false"}).unwrap_or(""),
+					cookie.same_site.as_ref().unwrap_or(&"".into()),
+				);
+				jar.add_cookie_str(
+					cookie_str.as_str(),
+					&url.unwrap()
+				);
+			}
+
+			let req_timings = &cfg::get().req_session.timings;
+			let mut req_client_builder = reqwest::Client::builder()
+				.user_agent(random_user_agent())
+				.cookie_provider(jar)
+				.timeout(
+					Duration::from_millis(req_timings.timeout)
+				)
+				.connect_timeout(
+					Duration::from_millis(req_timings.conn_timeout)
+				)
+				.read_timeout(
+					Duration::from_millis(req_timings.read_timeout)
+				);
+
+			if !proxy_pool.is_empty() {
+				let proxy_str = proxy_pool.get(0).unwrap();
+				if let Ok(proxy_param) = ProxyParam::from_str(proxy_str) {
+					let mut proxy = reqwest::Proxy::https(
+						format!("http://{}", proxy_param.addrs())
+						)
+						.map_err(|_| ReqSessionError::BuildReqClient)?;
+					if let (
+						Some(username),
+						Some(password)
+					) = (proxy_param.username, proxy_param.password) {
+						proxy = proxy.basic_auth(&username, &password);
+					}
+					req_client_builder = req_client_builder
+						.proxy(proxy);
+				}
+			}
+
+			let req_client = req_client_builder
+				.build()
+				.map_err(|_| {ReqSessionError::BuildReqClient})?;
+
+			Some(req_client)
+		} else {
+			None
+		};
+
+		let browser = if matches!(
+			method, ReqMethod::Browser | ReqMethod::Combined
+		) {
+			let browser_states = get_browser_states();
+			let browser = browser_states
+				.launch_browser_session()
+				.await?;
+
+			let browser_cookies = cookies.into_iter()
+				.map(|cp| {
+					BrowserCookieParam {
+						name: cp.name.clone(),
+						value: cp.value.clone(),
+						url: Some(cp.url.clone()),
+						domain: cp.domain.clone(),
+						path: cp.path.clone(),
+						secure: cp.secure.clone(),
+						http_only: cp.http_only.clone(),
+						same_site: {
+							match cp.same_site.as_ref().map(|v| v.as_str()) {
+								Some("lax") => Some(BrowserCookieSameSite::Lax),
+								None => None,
+								_ => Some(BrowserCookieSameSite::None)
+							}
+						},
+						..BrowserCookieParam::builder().build().unwrap()
+					}
+				})
+				.collect::<Vec<_>>();
+
+			let _ = browser.session.clear_data().await;
+			let _ = browser.session.reset_proxy().await;
+			let _ = browser.session.browser.clear_cookies().await;
+			let _ = browser.session.browser.set_cookies(browser_cookies).await;
+			if !proxy_pool.is_empty() {
+				let _ = browser.session.set_proxy(&proxy_pool[0]).await;
+			}
+
+			Some(browser)
+		} else {
+			None
+		};
+
+		sleep(
+			Duration::from_millis(
+				cfg::get().req_session.launch_sleep
+			)
+		).await;
 
 		Ok(
 			Self {
-				browser: browser,
-				reqwest_client,
-				cookies,
-				reqwest_config: true,
-				reqwest_count: 0
+				browser,
+				req_client,
+				proxy_pool,
+				set_proxy_interval: 0,
+				req_count: 0
 			}
 		)
 	}
 
-	async fn reqwest_product_data(&mut self, product: Product) -> Result<Option<ProductData>, ReqwestError> {
+	pub async fn req_product_data(
+		&mut self,
+		product: &Product
+	) -> Result<Option<ProductData>, ReqSessionError> {
+
+		let url = product.get_parse_url();
 		let content = match product.symbol {
 			Symbol::OZ | Symbol::YM | Symbol::MM => {
-				let page_parsm = PageParam {
-					..Default::default()
-				};
-				let page = self.browser
-					.session
-					.open_with_param(
-						&product.get_parse_url(),
-						&page_parsm
-					)
-					.await?;
-				let content = page.content()
-					.await
-					.map_err(|e| BrowserError::from(e))?;
-				let _ = page.close().await;
-
-				content
+				let page_parsm = get_product_page_param(
+					product.symbol.as_str()
+				);
+				self.browser_get_content(&url, page_parsm).await?
 			},
-			Symbol::WB => String::new(),
+			Symbol::WB => {
+				self.reqwest_get_content(&url).await?
+			}
 		};
 		let product_data = extract_data(
-			product.symbol,
+			product.symbol.clone(),
 			&content
 		);
-		self.reqwest_count += 1;
+		self.req_count += 1;
 
-		Ok (
-			product_data
-		)
+		Ok (product_data)
 	}
 
-	async fn close(&mut self) {
-		self.browser.session.close().await;
-		let browser_states = get_browser_states();
-		browser_states.stop_running(self.browser.port).await;
-		self.reqwest_count = 0;
+	pub async fn browser_get_content(
+		&self,
+		url: &str,
+		page_parsm: &PageParam<'_>
+	) -> Result<String, ReqSessionError> {
+
+		let page = self.browser
+			.as_ref()
+			.ok_or(ReqSessionError::NotAvailableReqMethod)?
+			.session
+			.open_with_param(
+				url,
+				page_parsm
+			)
+			.await?;
+		let content = page.content()
+			.await
+			.map_err(|e| BrowserError::from(e))?;
+		let _ = page.close().await;
+
+		Ok (content)
+	}
+
+	pub async fn reqwest_get_content(&self, url: &str) -> Result<String, ReqSessionError> {
+		self.req_client
+			.as_ref()
+			.ok_or(ReqSessionError::NotAvailableReqMethod)?
+			.get(url)
+			.send()
+			.await
+			.map_err(|_| ReqSessionError::RequestSending)?
+			.text()
+			.await
+			.map_err(|_| ReqSessionError::ExtractResponseContent)
+	}
+
+	pub async fn close(&mut self) {
+		if let Some(browser) = &mut self.browser {
+			browser.session.close().await;
+			let browser_states = get_browser_states();
+			browser_states.stop_running(browser.port).await;
+		}
+		self.req_count = 0;
 	}
 }
 
 
-// Состояние клиента
-// Однократная инициализация
-// RwLock для изменчивости в многопоточной среде
-// Хранит в себе массив сессий браузера
-// Параметры массива: user_data_dir, port
-// Имеет один изменчивый параметр - открыт/закрыт
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::time::sleep;
+    use std::time::Duration;
 
 
-// Клиент
-// Инициализация браузера и reqwest::Client
+    #[tokio::test]
+    async fn test_req_session() {
+		cfg::init();
+		println!("run test_req_session...");
+		println!("{:?}", get_browser_states());
+		//sleep(Duration::from_millis(10000)).await;
+        let mut rs = ReqSession::new(ReqMethod::Combined, &vec![], vec![])
+			.await
+			.unwrap();
+		println!("run ReqSession...");
+		let str_products = vec![
+			"ym/357396943-103478532298-85861607",
+			"ym/44497758-102626213158-757083",
+			"ym/273181503-103028807462-916755",
+			"ym/1915673993-102282726841-62878861",
+			"oz/142724424",
+			"oz/32549314",
+			"oz/1680678914",
+			"oz/1628554693",
+			"mm/100070722113",
+			"mm/100070722080",
+			"mm/100000579167",
+			"mm/100065768898",
+			"wb/248939630",
+			"wb/177900370",
+			"wb/259666228",
+			"wb/27090074",
+		];
+		for str_product in str_products {
+			println!("{str_product}");
 
-// pub fn reqwest_product_data(product: &Product, bs: Option<&BrowserSession>) -> ProductData {
-// 	match product.symbol {
-// 		Symbol::OZ | Symbol::YM | Symbol::MM => (),
-// 		Symbol::WB => (),
-// 	}
-// 	ProductData::rand()
-// }
+			let ptroduct = Product::from_string_without_valid(
+				str_product
+			);
+			let product_data = rs.req_product_data(
+				&ptroduct
+				)
+				.await;
 
-// async fn reqwest_get(url: &String) -> Option<String> {
-// 	let client_builder = reqwest::Client::builder()
-// 		.user_agent(random_user_agent())
-// 		.timeout(Duration::from_millis(REQWEST_CONFIG.timeout_millis));
+			println!("{:?}", get_browser_states());
 
-// 	let client;
+			println!("{product_data:#?}");
+		}
 
-// 	if REQWEST_CONFIG.proxy_list.len() > 0 && utils::rand_gen::<f64>() < REQWEST_CONFIG.proxy_percentage {
-// 		let pp = ProxyParams::from_string(
-// 			&REQWEST_CONFIG.proxy_list[utils::random_rng(0, REQWEST_CONFIG.proxy_list.len())]);
-// 		let proxy = reqwest::Proxy::https(format!("http://{}", pp.addrs)).ok()?
-// 			.basic_auth(&pp.username, &pp.password);
-// 		client = client_builder.proxy(proxy).build().ok()?;
-// 	} else {
-// 		client = client_builder.build().ok()?;
-// 	}
-// 	let content = client.get(url)
-// 		.send()
-// 		.await.ok()?.text().await.ok()?;
-// 	Some(content)
-// }
+		rs.close().await;
 
-// async fn reqwest_get_without_proxy(url: &String) -> Option<String> {
-// 	let client = reqwest::Client::builder()
-// 		.user_agent(
-// 			utils::get_rand_user_agent()
-// 		)
-// 		.timeout(
-// 			Duration::from_millis(REQWEST_CONFIG.timeout_millis)
-// 		).build().ok()?;
-// 	let content = client.get(url).send().await.ok()?.text().await.ok()?;
-
-// 	Some(content)
-// }
+		println!("{:?}", get_browser_states());
+        assert_eq!(true, true);
+    }
+}
