@@ -8,7 +8,7 @@ use tokio::{
 };
 use chromiumoxide::{
     cdp::browser_protocol::{
-        emulation::SetGeolocationOverrideParams,
+        //emulation::SetGeolocationOverrideParams,
         network::CookieParam
     },
     browser::HeadlessMode,
@@ -45,7 +45,7 @@ pub struct BrowserTimings {
     pub launch_sleep: u64,
     pub set_proxy_sleep: u64,
     pub action_sleep: u64,
-    pub wait_page_timeout: u64,
+    pub page_goto_timeout: u64
 }
 
 impl Default for BrowserTimings {
@@ -54,7 +54,7 @@ impl Default for BrowserTimings {
             launch_sleep: 280,
             set_proxy_sleep: 180,
             action_sleep: 80,
-            wait_page_timeout: 700
+            page_goto_timeout: 1400
         }
     }
 }
@@ -65,7 +65,9 @@ pub struct PageParam<'a> {
     pub wait_for_element: Option<(&'a str, u64)>,
     pub user_agent: Option<&'a str>,
     pub cookies: Vec<CookieParam>,
-    pub geolocation: Option<(f64, f64)>,
+    //pub geolocation: Option<(f64, f64)>,
+    pub wait_open_on_page: Option<u64>,
+    pub wait_for_navigation: Option<u64>,
     pub duration: u64
 }
 
@@ -76,7 +78,9 @@ impl<'a> Default for PageParam<'a> {
             wait_for_element: None,
             user_agent: None,
             cookies: Vec::new(),
-            geolocation: None,
+            //geolocation: None,
+            wait_open_on_page: None,
+            wait_for_navigation: None,
             duration: 0
         }
     }
@@ -221,10 +225,10 @@ impl BrowserSession {
     }
 
     pub async fn open_on_page<'a>(&self, url: &str, page: &'a Page) -> Result<(), BrowserError> {
-        page.goto(url).await?;
+        //page.goto(url).await?;
         let _ = timeout(
-            Duration::from_millis(self.timings.wait_page_timeout),
-            page.wait_for_navigation()
+            Duration::from_millis(self.timings.page_goto_timeout),
+            page.goto(url)
         ).await;
 
         Ok(())
@@ -258,6 +262,7 @@ impl BrowserSession {
         if !param.cookies.is_empty() {
             page.set_cookies(param.cookies.clone()).await?;
         }
+        /*
         if let Some(geolocation) = param.geolocation {
             page.emulate_geolocation(
                 SetGeolocationOverrideParams {
@@ -267,7 +272,21 @@ impl BrowserSession {
                 }
             ).await?;
         }
-        self.open_on_page(url, &page).await?;
+         */
+        if param.wait_open_on_page.is_some() {
+            let _ = timeout(
+                Duration::from_millis(param.wait_open_on_page.unwrap()),
+                self.open_on_page(url, &page)
+            ).await;
+        } else {
+            self.open_on_page(url, &page).await?;
+        }
+        if let Some(wait_timeout) = param.wait_for_navigation {
+            let _ = timeout(
+                Duration::from_millis(wait_timeout),
+                page.wait_for_navigation()
+            ).await;
+        }
         sleep(
             Duration::from_millis(param.duration)
         ).await;
@@ -281,7 +300,8 @@ impl BrowserSession {
     }
 
     pub async fn set_proxy(&self, proxy: &str) -> Result<(), BrowserError> {
-        if let Err(e) = self.browser.new_page(format!("chrome://set_proxy/{proxy}")).await {
+        if let Err(e) = self.browser
+        .new_page(format!("chrome://set_proxy/{proxy}")).await {
             let error = BrowserError::from(e);
             match error {
                 BrowserError::NetworkIO => {},
@@ -295,7 +315,8 @@ impl BrowserSession {
     }
 
     pub async fn reset_proxy(&self) -> Result<(), BrowserError> {
-        if let Err(e) = self.browser.new_page("chrome://reset_proxy").await {
+        if let Err(e) = self.browser
+        .new_page("chrome://reset_proxy").await {
             let error = BrowserError::from(e);
             match error {
                 BrowserError::NetworkIO => {},
@@ -309,7 +330,8 @@ impl BrowserSession {
     }
 
     pub async fn close_tabs(&self) -> Result<(), BrowserError> {
-        if let Err(e) = self.browser.new_page("chrome://close_tabs").await {
+        if let Err(e) = self.browser
+        .new_page("chrome://close_tabs").await {
             let error = BrowserError::from(e);
             match error {
                 BrowserError::NetworkIO => {},
@@ -323,7 +345,8 @@ impl BrowserSession {
     }
 
     pub async fn clear_data(&self) -> Result<(), BrowserError> {
-        if let Err(e) = self.browser.new_page("chrome://clear_data").await {
+        if let Err(e) = self.browser
+        .new_page("chrome://clear_data").await {
             let error = BrowserError::from(e);
             match error {
                 BrowserError::NetworkIO => {},
@@ -353,22 +376,18 @@ impl BrowserSession {
 pub trait Wait {
     const WAIT_SLEEP: u64 = 10;
 
-    async fn wait_for_element(&self, selector: &str) -> Result<(), BrowserError>;
+    async fn wait_for_element(&self, selector: &str);
 
     async fn wait_for_element_with_timeout(&self, selector: &str, t: u64) -> Result<(), BrowserError>;
 }
 
 impl Wait for Page {
-    async fn wait_for_element(
-        &self, selector: &str
-    ) -> Result<(), BrowserError> {
+    async fn wait_for_element(&self, selector: &str) {
         while self.find_element(selector).await.is_err() {
             sleep(
                 Duration::from_millis(Self::WAIT_SLEEP)
             ).await;
         }
-
-        Ok(())
     }
 
     async fn wait_for_element_with_timeout(
@@ -377,7 +396,7 @@ impl Wait for Page {
         timeout(
             Duration::from_millis(t),
             self.wait_for_element(selector)
-        ).await??;
+        ).await?;
 
         Ok(())
     }
@@ -393,15 +412,15 @@ static USER_AGENT_LIST: [&str; 20] = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 12.6; rv:116.0) Gecko/20100101 Firefox/116.0",
     "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:118.0) Gecko/20100101 Firefox/118.0",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 11_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
-    "Mozilla/5.0 (iPad; CPU OS 16_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
-    "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 12; SM-A515F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 11.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_0_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Linux; U; Android 12; en-US; SM-T870 Build/SP1A.210812.016) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/100.0.4896.127 Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 11; Mi 10T Pro Build/RKQ1.200826.002) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.41 Mobile Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Safari/605.1.15",
     "Mozilla/5.0 (Windows NT 10.0; rv:110.0) Gecko/20100101 Firefox/110.0",
     "Mozilla/5.0 (X11; Linux x86_64; rv:91.0) Gecko/20100101 Firefox/91.0",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.2 Safari/605.1.15",
