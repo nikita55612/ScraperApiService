@@ -37,8 +37,8 @@ pub async fn init() -> Result<Pool> {
                 id TEXT PRIMARY KEY,
                 created_at INTEGER NOT NULL,
                 ttl INTEGER NOT NULL,
-                ilimit INTEGER NOT NULL,
-                climit INTEGER NOT NULL
+                op_limit INTEGER NOT NULL,
+                tc_limit INTEGER NOT NULL
             );"#
         )
         .execute(&pool)
@@ -63,12 +63,27 @@ pub async fn init() -> Result<Pool> {
 
 pub async fn insert_token(pool: &Pool, token: &Token) -> Result<()> {
     sqlx::query(
-        "INSERT INTO tokens (id, created_at, ttl, ilimit) VALUES (?, ?, ?, ?);"
+        "INSERT INTO tokens (id, created_at, ttl, op_limit, tc_limit) VALUES (?, ?, ?, ?, ?);"
         )
         .bind(token.id.as_str())
         .bind(token.created_at as i64)
         .bind(token.ttl as i64)
-        .bind(token.ilimit as i64)
+        .bind(token.op_limit as i64)
+        .bind(token.tc_limit as i64)
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
+
+pub async fn update_token(pool: &Pool, token: &Token) -> Result<()> {
+    sqlx::query(
+            "UPDATE tokens SET ttl = ?, op_limit = ?, tc_limit = ? WHERE id = ?"
+        )
+        .bind(token.ttl as i64)
+        .bind(token.op_limit as i64)
+        .bind(token.tc_limit as i64)
+        .bind(token.id.clone())
         .execute(pool)
         .await?;
 
@@ -241,12 +256,12 @@ mod tests {
                 "oz/9999967890".into(),
                 "oz/7777767891".into()
                 ],
-            proxy_list: vec![
+            proxy_pool: vec![
                 "EyPrWhn4uZ:wN1qqx1gPH@178.255.30.223:11223".into(),
                 "DF3fdv4uZ:w3ER56bi1gRp@185.255.30.168:11223".into()
                 ],
-            proxy_map: HashMap::new(),
-            cookie_list: Vec::new()
+            //proxy_map: HashMap::new(),
+            cookies: Vec::new()
         };
         Task::from_order(order)
     }

@@ -28,33 +28,38 @@ pub fn get_master_token() -> &'static str {
 }
 
 async fn init() -> Router {
-
+    let config = cfg::get();
     let assets_path = OsPath::new(
-		&cfg::get().api.assets_path
+		&config.api.assets_path
 	);
-
-
     let db_pool = Arc::new(
-        db::init().await.unwrap()
+        db::init().await
+            .expect("Database initialization error")
     );
-
     let app_state = Arc::new(
         AppState::new(
             db_pool,
-            cfg::get().api.handlers_count,
-            cfg::get().api.handler_queue_limit
+            config.api.handlers_count,
+            config.api.handler_queue_limit,
+            config.api.open_ws_limit
         ).await
     );
 
     Router::new()
-
-        .route("/hello_world", routing::get(routers::hello_world))
+        .route("/ping", routing::get(routers::ping))
         .route("/myip", routing::get(routers::myip))
-        .route("/create_new_token/", routing::post(routers::create_new_token))
-        .route("/cutout_token/:token_id", routing::delete(routers::cutout_token))
+
+        .route("/create_token/", routing::post(routers::create_token))
+        .route("/update_token/", routing::post(routers::update_token))
+        .route("/cutout_token/{token_id}", routing::delete(routers::cutout_token))
+
         .route("/token_info", routing::get(routers::token_info))
+        .route("/token_info/{token_id}", routing::get(routers::token_info_))
+        .route("/state", routing::get(routers::state))
+        .route("/markets", routing::get(routers::markets))
         .route("/order", routing::post(routers::order))
-        .route("/task/:order_hash", routing::get(routers::task))
+        .route("/task/{order_hash}", routing::get(routers::task))
+        .route("/task_ws/{order_hash}", routing::any(routers::task_ws))
 
         //.route("/api/*path", method_router)
 
@@ -68,7 +73,6 @@ async fn init() -> Router {
                 assets_path.join("index.html")
             )
         )
-
         .fallback_service(
             ServeFile::new(
                 assets_path.join("404.html")
@@ -105,8 +109,19 @@ mod tests {
 
 
     #[tokio::test]
-    async fn test_server() {
+    async fn test_run_server() {
         run_server().await;
+        assert_eq!(true, true);
+    }
+
+    #[tokio::test]
+    async fn test_run_server_loop() {
+        cfg::init();
+        println!("Server is runing...");
+        run_server().await;
+        loop {
+            sleep(Duration::from_millis(100)).await;
+        }
         assert_eq!(true, true);
     }
 
@@ -117,7 +132,7 @@ mod tests {
         let client = reqwest::Client::new();
         let response = client.post(
                 format!(
-                    "http://{}/create_new_token/?ttl=120000&ilimit=400",
+                    "http://{}/create_new_token/?ttl=120000&ilimit=400&climit=400",
                     cfg::get().server.addr()
                 )
             )

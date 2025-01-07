@@ -12,6 +12,7 @@ use tokio::{
             Sender,
         },
         RwLock,
+        Mutex,
     },
     task::JoinHandle,
 };
@@ -46,10 +47,8 @@ impl TaskHandler {
                 HashMap::with_capacity(queue_limit)
             )
         );
-        let (
-            sender,
-            receiver
-        ) = mpsc::channel::<OrderHash>(queue_limit);
+        let (sender,
+            receiver) = mpsc::channel::<OrderHash>(queue_limit);
         let join_handle = Self::spawn_handler(
             db_pool,
             receiver,
@@ -72,7 +71,7 @@ impl TaskHandler {
         tokio::spawn(async move {
             while let Some(order_hash) = receiver.recv().await {
                 let task = task_heap.read().await.get(&order_hash).unwrap().clone();
-                let mut stream = task_stream(task.clone());
+                let mut stream = task_stream(task.clone()).await;
 
                 while let Some(task) = stream.next().await {
                     if matches!(task.status, TaskStatus::Completed | TaskStatus::Error) {
@@ -152,13 +151,16 @@ pub struct AppState {
     pub task_handlers: Vec<TaskHandler>,
     pub handlers_count: usize,
     pub handler_queue_limit: usize,
+    pub open_ws_counter: Mutex<u32>,
+    pub open_ws_limit: u32
 }
 
 impl AppState {
     pub async fn new(
         db_pool: Arc<db::Pool>,
         handlers_count: usize,
-        handler_queue_limit: usize
+        handler_queue_limit: usize,
+        open_ws_limit: u32
     ) -> Self {
         let mut task_handlers = Vec::with_capacity(handlers_count);
         for _ in 0..handlers_count {
@@ -173,7 +175,9 @@ impl AppState {
             db_pool,
             task_handlers,
             handlers_count,
-            handler_queue_limit
+            handler_queue_limit,
+            open_ws_counter: Mutex::new(0),
+            open_ws_limit
         }
     }
 
@@ -183,6 +187,15 @@ impl AppState {
 
         self.task_handlers.get(handler_index).unwrap()
             .registering_task(task).await
+    }
+
+    pub async fn get_task_count(&self) -> usize {
+        let mut task_count = 0_usize;
+        for handler in self.task_handlers.iter() {
+            task_count += handler.len().await;
+        }
+
+        task_count
     }
 
     pub async fn task_count_by_token_id(&self, token_id: &str) -> usize {
@@ -226,5 +239,26 @@ impl AppState {
             .min_by_key(|(_, value)| *value)
             .unwrap_or((0, &0))
             .0
+    }
+
+    pub async fn open_websocket(&self) -> Result<(), ApiError> {
+        let mut open_ws_counter = self.open_ws_counter
+            .lock()
+            .await;
+        if *open_ws_counter >= self.open_ws_limit {
+            return Err (
+                ApiError::WebSocketLimitExceeded(self.open_ws_limit)
+            );
+        }
+        *open_ws_counter += 1;
+
+        Ok(())
+    }
+
+    pub async fn close_websocket(&self) {
+        let mut open_ws_counter = self.open_ws_counter
+            .lock()
+            .await;
+        *open_ws_counter -= 1;
     }
 }

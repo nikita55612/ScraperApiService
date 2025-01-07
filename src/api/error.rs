@@ -9,7 +9,10 @@ use axum::{
 };
 use thiserror::Error;
 
-use super::super::models::validation::ValidationError;
+use super::super::{
+    scraper::error::ReqSessionError,
+    models::validation::ValidationError
+};
 
 
 #[derive(Error, Debug)]
@@ -50,10 +53,10 @@ pub enum ApiError {
     #[error("{{ \"message\": \"The handler queue is full '{0}' and cannot accept new tasks.\", \"error\": \"HandlerQueueOverflow\", \"code\": 300 }}")]
     HandlerQueueOverflow(u64),
 
-    #[error("{{ \"message\": \"The order exceeds the maximum '{0}' allowed limit.\", \"error\": \"OrderLimitExceeded\", \"code\": 301 }}")]
-    OrderLimitExceeded(u64),
+    #[error("{{ \"message\": \"The order exceeds the maximum products '{0}' allowed limit.\", \"error\": \"OrderProductsLimitExceeded\", \"code\": 301 }}")]
+    OrderProductsLimitExceeded(u64),
 
-    #[error("{{ \"message\": \"The token has exceeded the limit '{0}' for concurrent order processing.\", \"error\": \"ConcurrentProcessingLimitExceeded\", \"code\": 302 }}")]
+    #[error("{{ \"message\": \"The token has exceeded the limit '{0}' for concurrent order processing.\", \"error\": \"ConcurrencyLimitExceeded\", \"code\": 302 }}")]
     ConcurrencyLimitExceeded(u64),
 
     #[error("{{ \"message\": \"Failed to send the task to the handler.\", \"error\": \"TaskSendFailure\", \"code\": 303 }}")]
@@ -65,17 +68,26 @@ pub enum ApiError {
     #[error("{{ \"message\": \"A task with the specified order_hash does not exist.\", \"error\": \"TaskNotFound\", \"code\": 305 }}")]
     TaskNotFound,
 
+    #[error("{{ \"message\": \"Cannot establish new WebSocket connection as server has reached maximum limit of '{0}' concurrent connections.\", \"error\": \"WebSocketLimitExceeded\", \"code\": 306 }}")]
+    WebSocketLimitExceeded(u32),
+
     #[error("{{ \"message\": \"Token does not exist.\", \"error\": \"TokenDoesNotExist\", \"code\": 400 }}")]
     TokenDoesNotExist,
 
     #[error("{{ \"message\": \"Database transaction failed.\", \"error\": \"DatabaseError\", \"code\": 401 }}")]
     DatabaseError,
 
-    #[error("{{ \"message\": \"Unknown server error.\", \"error\": \"Unknown\", \"code\": 0 }}")]
-    Unknown,
+    #[error("{{ \"message\": \"{0}\", \"error\": \"ReqwestSessionError\", \"code\": 500 }}")]
+    ReqwestSessionError(String),
 
-    #[error("{{ \"message\": \"{0}\" }}")]
-    Warning(String),
+    #[error("{{ \"message\": \"Failed to serialize object.\", \"error\": \"SerializationError\", \"code\": 600 }}")]
+    SerializationError,
+
+    #[error("{{ \"message\": \"Failed to deserialize object.\", \"error\": \"DeserializationError\", \"code\": 601 }}")]
+    DeserializationError,
+
+    #[error("{{ \"message\": \"Unknown server error.\", \"error\": \"Unknown\", \"code\": 0 }}")]
+    Unknown
 }
 
 impl ApiError {
@@ -94,8 +106,9 @@ impl ApiError {
 
             Self::HandlerQueueOverflow(_)
             | Self::TaskAlreadyExists(_)
-            | Self::OrderLimitExceeded(_)
-            | Self::ConcurrencyLimitExceeded(_) => StatusCode::CONFLICT,
+            | Self::OrderProductsLimitExceeded(_)
+            | Self::ConcurrencyLimitExceeded(_)
+            | Self::WebSocketLimitExceeded(_) => StatusCode::CONFLICT,
 
             Self::InvalidMasterToken
             | Self::InvalidAuthorizationHeader
@@ -104,7 +117,10 @@ impl ApiError {
 
             Self::Unknown
             | Self::DatabaseError
-            | Self::TaskSendFailure => StatusCode::INTERNAL_SERVER_ERROR,
+            | Self::TaskSendFailure
+            | Self::ReqwestSessionError(_)
+            | Self::SerializationError
+            | Self::DeserializationError => StatusCode::INTERNAL_SERVER_ERROR,
 
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -134,6 +150,11 @@ impl From<sqlx::Error> for ApiError {
     }
 }
 
+impl From<ReqSessionError> for ApiError {
+    fn from(value: ReqSessionError) -> Self {
+        ApiError::ReqwestSessionError(value.to_string())
+    }
+}
 
 impl From<ValidationError> for ApiError {
     fn from(value: ValidationError) -> Self {
