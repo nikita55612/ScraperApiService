@@ -1,10 +1,19 @@
 #![allow(warnings)]
+use std::{collections::HashMap, path::Path};
+
 use once_cell::sync::OnceCell;
 use serde::{
     Deserialize,
     Deserializer,
+    Serialize
 };
-use super::utils::read_file;
+use super::utils::{
+    read_file,
+    write_to_file,
+    mkdir_if_not_exists,
+    is_port_open,
+    remove_all_dirs
+};
 use browser_bridge::{
     chromiumoxide::{
         browser::HeadlessMode,
@@ -21,38 +30,77 @@ static BROWSER_SESSION_CFG: OnceCell<BrowserSessionConfig> = OnceCell::new();
 
 pub fn get() -> &'static Config {
     CFG.get_or_init(|| {
-        let config = match read_file("Config.toml") {
+        match read_file("Config.toml") {
             Ok(cfg) => toml::from_str::<Config>(&cfg)
-                .unwrap_or_else(|e| {
-                    eprint!("Fail to parse config!\n {e}");
-                    Config::default()
-                }
-            ),
+                .expect("Deserialize config error"),
             Err(e) => {
-                eprint!("Fail to read config!\n {e}");
-                Config::default()
+                log::error!("Fail to read config!\n {e}");
+                if !Path::new("Config.toml").exists() {
+                    log::error!("Config.toml is not exists!\n {e}");
+                    let config = toml::to_string_pretty::<Config>(
+                        &Config::default()
+                    ).expect("Serialize config error");
+                    write_to_file(
+                        "Config.toml",
+                        config.as_bytes()
+                        )
+                        .expect("Write to Config.toml error");
+                    log::warn!("Config.toml is default!");
+                    log::info!("Edit the config and restart app...")
+                }
+                panic!();
             }
-        };
-        for (key, value) in config.env.iter() {
-            std::env::set_var(key, value);
         }
-
-        config
     })
 }
 
-#[derive(Deserialize, Default, Debug, Clone)]
+pub fn init() {
+    let config = get();
+    if let Some(env) = &config.env {
+        for (key, value) in env.iter() {
+            log::info!("[SET_ENV_VAR] {}={}", key, value);
+            std::env::set_var(key, value);
+        }
+    }
+    mkdir_if_not_exists(
+        &config.browser.users_temp_data_dir
+    );
+    let _ = remove_all_dirs(&config.browser.users_temp_data_dir);
+    if !is_port_open(config.server.port) {
+        log::error!("Server port {} already in use", config.server.port);
+        panic!();
+    }
+    if dotenv::dotenv().is_err() {
+        log::warn!(".env file not found");
+    }
+    if let Ok(mt) = std::env::var("MASTER_TOKEN") {
+        log::info!("MASTER_TOKEN={}", mt)
+    } else {
+        log::error!("Env var MASTER_TOKEN not defined");
+        panic!();
+    }
+    if let Ok(mt) = std::env::var("VERSION") {
+        log::info!("VERSION={}", mt)
+    } else {
+        log::error!("Env var VERSION not defined");
+        panic!();
+    }
+}
+
+#[derive(Deserialize, Serialize, Default, Debug, Clone)]
 pub struct Config {
-    env: Vec<(String, String)>,
+    #[serde(skip_serializing)]
+    env: Option<Vec<(String, String)>>,
     pub server: Server,
     pub api: Api,
     pub browser: Browser,
+    pub req_session: ReqSession
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Server {
     pub host: String,
-    pub port: u64
+    pub port: u16
 }
 
 impl Server {
@@ -61,19 +109,21 @@ impl Server {
     }
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Api {
-    pub version: String,
     pub assets_path: String,
     pub db_path: String,
     pub db_max_conn: u32,
     pub handlers_count: usize,
-    pub handler_queue_limit: usize
+    pub handler_queue_limit: usize,
+    pub task_ws_sending_interval: u64,
+    pub open_ws_limit: u32
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Browser {
     pub executable: Option<String>,
+    pub users_temp_data_dir: String,
     pub args: Vec<String>,
     pub headless_mod: u8,
     pub sandbox: bool,
@@ -86,28 +136,38 @@ pub struct Browser {
     pub page_param: BrowserPageParam
 }
 
-#[derive(Deserialize, Debug, Clone)]
-struct DeBrowserTimings {
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct ReqSession {
+    pub launch_sleep: u64,
+    pub timings: ReqTimings,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct ReqTimings {
+    pub timeout: u64,
+    pub conn_timeout: u64,
+    pub read_timeout: u64
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct DeBrowserTimings {
     pub launch_sleep: u64,
     pub set_proxy_sleep: u64,
     pub action_sleep: u64,
-    pub wait_page_timeout: u64,
+    pub page_goto_timeout: u64,
 }
 
-#[derive(Deserialize, Default, Debug, Clone)]
-struct BrowserPageParam {
-    pub stealth_mode: bool,
+#[derive(Deserialize, Serialize, Default, Debug, Clone)]
+pub struct BrowserPageParam {
     pub rand_user_agent: bool,
-    pub duration: BrowserPageParamDuration,
+    pub wait_for_element_timeout: u64,
+    #[serde(default)]
+    pub symbol: HashMap<String, SymbolPageParam>
 }
 
-#[derive(Deserialize, Default, Debug, Clone)]
-struct BrowserPageParamDuration {
-    pub base_: u64,
-    pub oz: u64,
-    pub wb: u64,
-    pub ym: u64,
-    pub mm: u64,
+#[derive(Deserialize, Serialize, Default, Debug, Clone)]
+pub struct SymbolPageParam {
+    pub wait_for_product_element: Option<String>
 }
 
 impl Default for Server {
@@ -122,12 +182,13 @@ impl Default for Server {
 impl Default for Api {
     fn default() -> Self {
         Self {
-            version: "0.1.0".into(),
             assets_path: "assets".into(),
             db_path: "sqlite:scraper_api.db".into(),
             db_max_conn: 2,
             handlers_count: 1,
-            handler_queue_limit: 10
+            handler_queue_limit: 10,
+            task_ws_sending_interval: 1000,
+            open_ws_limit: 20
         }
     }
 }
@@ -137,6 +198,7 @@ impl Default for Browser {
         let default = BrowserSessionConfig::default();
         Self {
             executable: default.executable,
+            users_temp_data_dir: "./users_temp_data".into(),
             args: default.args,
             headless_mod: 0,
             sandbox: default.sandbox,
@@ -158,7 +220,26 @@ impl Default for DeBrowserTimings {
             launch_sleep: default.launch_sleep,
             set_proxy_sleep: default.set_proxy_sleep,
             action_sleep: default.action_sleep,
-            wait_page_timeout: default.wait_page_timeout,
+            page_goto_timeout: default.page_goto_timeout
+        }
+    }
+}
+
+impl Default for ReqSession {
+    fn default() -> Self {
+        Self {
+            launch_sleep: 700,
+            timings: ReqTimings::default()
+        }
+    }
+}
+
+impl Default for ReqTimings {
+    fn default() -> Self {
+        Self {
+            timeout: 700,
+            conn_timeout: 500,
+            read_timeout: 500
         }
     }
 }
@@ -169,7 +250,7 @@ impl From<DeBrowserTimings> for BrowserTimings {
             launch_sleep: value.launch_sleep,
             set_proxy_sleep: value.set_proxy_sleep,
             action_sleep: value.action_sleep,
-            wait_page_timeout: value.wait_page_timeout,
+            page_goto_timeout: value.page_goto_timeout
         }
     }
 }

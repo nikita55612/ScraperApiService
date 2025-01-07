@@ -1,8 +1,6 @@
 #![allow(warnings)]
 use std::{
-    ffi::OsString,
-    net::TcpStream,
-    path::Path,
+    collections::HashSet, ffi::OsString, io::Write, net::TcpListener, path::Path
 };
 use chrono::Local as LocalTime;
 use rand::{
@@ -13,16 +11,29 @@ use sha1::{
     Sha1,
 };
 
-use super::config;
+use super::config as cfg;
 
+
+pub fn mkdir_if_not_exists<T: AsRef<Path>>(path: T) -> std::io::Result<()> {
+    std::fs::create_dir_all(path)
+}
+
+pub fn write_to_file<P: AsRef<Path>>(file_path: P, content: &[u8]) -> std::io::Result<()> {
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(file_path)?;
+
+    file.write_all(content)
+}
 
 pub fn print_logo() {
-    println!("{}", config::LOGO)
+    println!("{}", cfg::LOGO)
 }
 
 pub fn is_port_open(port: u16) -> bool {
-    TcpStream::connect(
-        (config::get().server.addr(), port)
+    TcpListener::bind(
+        (cfg::get().server.host.as_str(), port)
     ).is_ok()
 }
 
@@ -30,7 +41,7 @@ pub fn timestamp_now() -> u64 {
     LocalTime::now().timestamp() as u64
 }
 
-fn random_string(len: usize) -> String {
+pub fn random_string(len: usize) -> String {
     let mut rng = thread_rng();
     (0..len)
         .map(|_| rng.sample(Alphanumeric) as char)
@@ -43,7 +54,7 @@ pub fn create_uuid() -> String {
 }
 
 pub fn create_token_id() -> String {
-    format!("rs.{}", random_string(33))
+    format!("rs.{}", random_string(25))
 }
 
 pub fn sha1_hash(data: &[u8]) -> String {
@@ -65,6 +76,24 @@ pub fn list_dir<T: AsRef<Path>>(dir: T) -> std::io::Result<Vec<OsString>> {
             .map(|v| v.file_name())
             .collect::<Vec<_>>()
     )
+}
+
+pub fn remove_all_dirs<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(path)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_dir() {
+            std::fs::remove_dir_all(&path)?;
+        }
+    }
+    Ok(())
+}
+
+pub fn remove_duplicates<T>(l: &mut Vec<T>)
+where T: Eq + std::hash::Hash + Clone {
+    let mut seen = HashSet::new();
+    l.retain(|i| seen.insert(i.clone()));
 }
 
 pub fn select_random_product_name() -> &'static str {
@@ -191,12 +220,55 @@ pub fn select_random_brand() -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     #[test]
     fn test_create_token_id() {
         for _ in (0..100) {
             println!("{}", create_token_id());
         }
+        assert_eq!(true, true);
+    }
+
+    #[test]
+    fn test_mkdir() {
+        let path = Path::new(
+            &cfg::get().browser.users_temp_data_dir
+        );
+        mkdir_if_not_exists(path).unwrap();
+        assert_eq!(true, true);
+    }
+
+    #[test]
+    fn test_is_port_open() {
+        assert_eq!(true, is_port_open(51081));
+    }
+
+    #[test]
+    fn test_remove_all_directories() {
+        remove_all_dirs("./users_temp_data").unwrap();
+        assert_eq!(true, true);
+    }
+
+    #[test]
+    fn test_remove_list_dub() {
+        let mut list = vec![
+            "123",
+            "123",
+            "123",
+            "123",
+            "123",
+            "123",
+            "1235",
+            "1234",
+            "1233",
+            "1232",
+            "1231",
+        ];
+        println!("{:?}", list);
+        let mut seen = HashSet::new();
+        list.retain(|item| seen.insert(item.clone()));
+        println!("{:?}", list);
         assert_eq!(true, true);
     }
 }
