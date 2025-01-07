@@ -7,8 +7,6 @@ use serde::{
 };
 use rand::Rng;
 
-//use browser_bridge::chromiumoxide::cdp::browser_protocol::network::CookieParam;
-
 use super::super::scraper::error::ScraperError;
 use super::super::utils::{
 	select_random_product_name,
@@ -20,7 +18,7 @@ use super::super::utils::{
 
 static MARKET_MAP: OnceCell<HashMap<String, Market>> = OnceCell::new();
 
-fn get_or_init_market_map() -> &'static HashMap<String, Market> {
+pub fn get_market_map() -> &'static HashMap<String, Market> {
     MARKET_MAP.get_or_init(|| {
         HashMap::from([
             (
@@ -198,7 +196,13 @@ impl Product {
         let url = match symbol {
             Symbol::OZ => format!("https://www.ozon.ru/product/{}", id),
             Symbol::WB => format!("https://www.wildberries.ru/catalog/{}/detail.aspx", id),
-            Symbol::YM => format!("https://www.podrygka.ru/catalog/{}-/", id),
+            Symbol::YM => {
+                let parts = id.splitn(3, '-').collect::<Vec<_>>();
+                format!(
+                    "https://market.yandex.ru/product/{}?sku={}&uniqueId={}",
+                    parts[0], parts[1], parts[2],
+                )
+            },
             Symbol::MM => format!("https://megamarket.ru/promo-page/details/#?slug={}", id),
         };
 
@@ -209,23 +213,27 @@ impl Product {
         }
     }
 
+    pub fn from_url(url: &str) -> Self {
+        Self {
+            symbol: Symbol::OZ,
+            id: String::new(),
+            url: String::new()
+        }
+    }
+
     pub fn get_parse_url(&self) -> String {
         match self.symbol {
             Symbol::OZ => format!("https://www.ozon.ru/api/entrypoint-api.bx/page/json/v2?url=/product/{}/", self.id),
             Symbol::WB => format!("https://card.wb.ru/cards/v2/detail?appType=1&curr=rub&dest=-1257218&nm={}", self.id),
-            Symbol::YM => format!("https://www.podrygka.ru/catalog/{}-/", self.id),
+            Symbol::YM => {
+                let parts = self.id.splitn(3, '-').collect::<Vec<_>>();
+                format!(
+                    "https://market.yandex.ru/product/{}?sku={}&uniqueId={}",
+                    parts[0], parts[1], parts[2],
+                )
+            },
             Symbol::MM => format!("https://megamarket.ru/promo-page/details/#?slug={}", self.id),
             _ => self.url.clone(),
         }
     }
 }
-
-// fn symbol_to_url(symbol: &Symbol, id: &str) -> String {
-//     match symbol {
-//         Symbol::OZ => format!("https://www.ozon.ru/product/{}", id),
-//         Symbol::WB => format!("https://www.wildberries.ru/catalog/{}/detail.aspx", id),
-//         Symbol::YM => format!("https://www.podrygka.ru/catalog/{}-/", id),
-//         Symbol::MM => format!("https://megamarket.ru/promo-page/details/#?slug={}", id),
-//         _ => String::new(),
-//     }
-// }

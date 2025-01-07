@@ -20,9 +20,67 @@ fn get_proxy_regex() -> &'static Regex {
 	})
 }
 
+pub struct ProxyParam {
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub host: String,
+    pub port: u16
+}
+
+impl ProxyParam {
+	pub fn from_str(s: &str) -> Result<Self, ValidationError> {
+		let caps = get_proxy_regex()
+			.captures(s)
+			.ok_or(InvalidProxy::InvalidProxyFormat(s.into()))?;
+
+		let host = caps.name("host")
+			.ok_or(InvalidProxy::InvalidProxyFormat(s.into()))?
+			.as_str()
+			.to_string()
+			.parse::<IpAddr>()
+			.map_err(|_| InvalidProxy::InvalidProxyIp(s.into()))?
+			.to_string();
+
+		let port = caps.name("port")
+			.and_then(|m| m.as_str().parse::<u16>().ok())
+			.ok_or(InvalidProxy::InvalidProxyPort(s.into()))?;
+
+		let username = caps.name("username")
+			.map(|m| m.as_str().to_string());
+
+		let password = caps.name("password")
+			.map(|m| m.as_str().to_string());
+
+		Ok (
+			Self {
+				username,
+				password,
+				host,
+				port
+			}
+		)
+	}
+
+	pub fn addrs(&self) -> String {
+		format!("{}:{}", self.host, self.port)
+	}
+}
+
 pub enum ValidationError {
 	Proxy(InvalidProxy),
 	Product(InvalidProduct)
+}
+
+impl From<InvalidProxy> for ValidationError {
+	fn from(value: InvalidProxy) -> Self {
+		Self::Proxy(value)
+	}
+}
+
+impl From<InvalidProduct> for ValidationError {
+	fn from(value: InvalidProduct) -> Self {
+		Self::Product(value)
+	}
 }
 
 #[derive(Debug, Error)]
@@ -57,19 +115,21 @@ impl Validation for Order {
 	type Error = ValidationError;
 
 	fn validation(&self) -> Result<(), Self::Error> {
-		for proxy in self.proxy_list.iter() {
+		for proxy in self.proxy_pool.iter() {
             proxy_str_validation(proxy)
 				.map_err(|e| ValidationError::Proxy(e))?;
         }
 
-		for (symbol, proxy) in self.proxy_map.iter() {
-			Symbol::from_string(symbol)
-				.map_err(|_| ValidationError::Proxy(
-					InvalidProxy::InvalidProxySymbol(symbol.into())
-				))?;
-            proxy_str_validation(proxy)
-				.map_err(|e| ValidationError::Proxy(e))?;
-        }
+		// for (symbol, proxy_pool) in self.proxy_map.iter() {
+		// 	Symbol::from_string(symbol)
+		// 		.map_err(|_| ValidationError::Proxy(
+		// 			InvalidProxy::InvalidProxySymbol(symbol.into())
+		// 		))?;
+		// 	for proxy in proxy_pool {
+		// 		proxy_str_validation(proxy)
+		// 			.map_err(|e| ValidationError::Proxy(e))?;
+		// 	}
+        // }
 
 		for product in self.products.iter() {
 			product_str_validation(product)

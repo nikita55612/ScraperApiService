@@ -8,6 +8,7 @@ use serde::{
 use super::super::models::scraper::ProductData;
 use super::super::api::error::ApiError;
 use super::super::utils::{
+    remove_duplicates,
     create_token_id,
     timestamp_now,
     sha1_hash
@@ -20,24 +21,23 @@ type OrderHash = String;
 #[derive(Clone, Debug, PartialEq, sqlx::FromRow, Serialize, Deserialize)]
 pub struct Token {
     pub id: String,
-
 	#[serde(rename="createdAt")]
     pub created_at: u64,
     pub ttl: u64,
-    #[serde(rename="iLimit")]
-    pub ilimit: u64,
-    #[serde(rename="cLimit")]
-    pub climit: u64
+    #[serde(rename="orderProductsLimit")]
+    pub op_limit: u64,
+    #[serde(rename="taskCountLimit")]
+    pub tc_limit: u64
 }
 
 impl Token {
-    pub fn new(ttl: u64, ilimit: u64, climit: u64) -> Self  {
+    pub fn new(ttl: u64, op_limit: u64, tc_limit: u64) -> Self  {
         Self {
             id: create_token_id(),
             created_at: timestamp_now(),
             ttl,
-            ilimit,
-            climit
+            op_limit,
+            tc_limit
         }
     }
 
@@ -46,7 +46,7 @@ impl Token {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all="lowercase")]
 pub enum TaskStatus {
     Waiting,
@@ -68,34 +68,62 @@ pub struct Order {
 	#[serde(skip)]
     pub token_id: String,
     pub products: Vec<String>,
-
-	#[serde(rename="proxyList")]
-    pub proxy_list: Vec<String>,
-    #[serde(rename="proxyMap")]
-    pub proxy_map: HashMap<String, String>,
-	#[serde(rename="cookieList")]
-	pub cookie_list: Vec<OrderCookiesParam>,
+	#[serde(rename="proxyPool")]
+    pub proxy_pool: Vec<String>,
+    //#[serde(rename="proxyMap")]
+    //pub proxy_map: HashMap<String, Vec<String>>,
+	#[serde(rename="cookies")]
+	pub cookies: Vec<OrderCookieParam>,
 }
 
 impl Order {
     fn sha1_hash(&self) -> OrderHash {
+        let mut sort_data = self.products.clone();
+        sort_data.sort();
         let order_hash_data = format!(
-            "{} {}",
+            "{}.{}",
             self.token_id,
-            self.products.join(",")
+            sort_data.join(",")
         );
 
         sha1_hash(
             order_hash_data.as_bytes()
         )
     }
+
+    pub fn remove_duplicates(&mut self) {
+        if !self.products.is_empty() {
+            remove_duplicates(&mut self.products);
+        }
+        if !self.proxy_pool.is_empty() {
+            remove_duplicates(&mut self.proxy_pool);
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct OrderCookieParam {
+    pub name: String,
+    pub value: String,
+    pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub domain: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(rename="httpOnly", skip_serializing_if = "Option::is_none")]
+    pub http_only: Option<bool>,
+    #[serde(rename="sameSite", skip_serializing_if = "Option::is_none")]
+    pub same_site: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub secure: Option<bool>
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct OrderExtractData {
     pub products: Vec<String>,
-    pub proxy_list: Vec<String>,
-	pub cookie_list: Vec<OrderCookiesParam>,
+    pub proxy_pool: Vec<String>,
+    //pub proxy_map: HashMap<String, Vec<String>>,
+	pub cookies: Vec<OrderCookieParam>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -116,7 +144,17 @@ pub struct Task {
     pub created_at: u64,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+impl PartialEq for Task {
+    fn eq(&self, other: &Self) -> bool {
+        self.order_hash == other.order_hash &&
+        self.queue_num == other.queue_num &&
+        self.status == other.status &&
+        self.progress == other.progress &&
+        self.queue_num == other.queue_num
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct TaskProgress(u64, u64);
 
 impl TaskProgress {
@@ -155,11 +193,18 @@ impl Task {
         )
     }
 
+    pub fn set_result_error(&mut self, error: String) {
+        self.result = Some(
+            TaskResult::Error(error)
+        )
+    }
+
     pub fn extract_order_data(&mut self) -> OrderExtractData {
         let extract_data = OrderExtractData {
             products: std::mem::take(&mut self.order.products),
-            proxy_list: std::mem::take(&mut self.order.proxy_list),
-            cookie_list: std::mem::take(&mut self.order.cookie_list),
+            proxy_pool: std::mem::take(&mut self.order.proxy_pool),
+            //proxy_map: std::mem::take(&mut self.order.proxy_map),
+            cookies: std::mem::take(&mut self.order.cookies),
         };
 
         extract_data
@@ -206,15 +251,10 @@ impl Task {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct OrderCookiesParam {
-    name: String,
-    value: String,
-    url: Option<String>,
-    domain: Option<String>,
-    path: Option<String>,
-    #[serde(rename="httpOnly")]
-    http_only: Option<bool>,
-    #[serde(rename="sameSite")]
-    same_site: Option<String>,
-    secure: Option<bool>
+pub struct ApiState {
+    pub handlers_count: usize,
+    pub tasks_queue_limit: usize,
+    pub curr_task_queue: usize,
+    pub open_ws_limit: u32,
+    pub curr_open_ws: u32
 }
