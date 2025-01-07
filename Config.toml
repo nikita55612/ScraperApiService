@@ -1,34 +1,28 @@
 env = [
-	["MASTER_TOKEN", "123"]
+    ["MASTER_TOKEN", "123"],
+    ["VERSION", "v1.0.0"],
+    ["LAST_UPDATE", "07:01:2025"],
+    ["GITHUB", "1"],
+    ["CONTACT", "1"],
+    ["LANG", "Rust"],
+    ["WEB_DEP", "axum==0.7.9"],
 ]
 
 [server]
 host = "127.0.0.1"
-port = 5500
+port = 5050
 
 [api]
-version = "0.1.0"
 assets_path = "assets"
 db_path = "sqlite:scraper_api.db"
 db_max_conn = 2
-handlers_count = 0
-handler_queue_limit = 21
-
-#[scraper]
+handlers_count = 1
+handler_queue_limit = 10
+task_ws_sending_interval = 1000
+open_ws_limit = 20
 
 [browser]
-# Optional configuration:
-# executable = ""
-
-# DEFAULT ARGS:
-#    "--disable-blink-features=AutomationControlled",
-#    "--disable-default-apps",
-#    "--no-first-run",
-#    "--disable-sync",
-#    "--lang=en_US",
-#    "--no-default-browser-check",
-#    "--disable-smooth-scrolling",
-#    "--disable-features=TranslateUI"
+users_temp_data_dir = "./users_temp_data"
 args = [
     "--disable-blink-features=AutomationControlled",
     "--disable-default-apps",
@@ -37,31 +31,35 @@ args = [
     "--lang=en_US",
     "--no-default-browser-check",
     "--disable-smooth-scrolling",
-    "--disable-features=TranslateUI"
+    "--disable-features=TranslateUI",
 ]
-# 0: Falsse, 1: True, 2: New
 headless_mod = 0
 sandbox = false
 extensions = []
 incognito = false
-# >= api.task_handlers
 launch_timeout = 1500
 request_timeout = 2000
 cache_enabled = true
 
 [browser.timings]
-launch_sleep = 280
+launch_sleep = 300
 set_proxy_sleep = 180
 action_sleep = 80
-wait_page_timeout = 700
+page_goto_timeout = 1400
 
 [browser.page_param]
-stealth_mode = false
 rand_user_agent = false
+wait_for_element_timeout = 1000
 
-[browser.page_param.duration]
-base_ = 0
-oz = 0
-wb = 0
-ym = 0
-mm = 0
+[browser.page_param.symbol]
+oz.wait_for_product_element = "body > pre"
+ym.wait_for_product_element = """div[data-baobab-name="productSnippet"]"""
+mm.wait_for_product_element = """meta[itemprop="price"]"""
+
+[req_session]
+launch_sleep = 200
+
+[req_session.timings]
+timeout = 700
+conn_timeout = 500
+read_timeout = 500
