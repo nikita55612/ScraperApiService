@@ -1,5 +1,7 @@
 env = [
     ["MASTER_TOKEN", "123"],
+]
+pub_env = [
     ["VERSION", "v1.0.0"],
     ["LAST_UPDATE", "07:01:2025"],
     ["GITHUB", "1"],
@@ -20,6 +22,17 @@ handlers_count = 1
 handler_queue_limit = 10
 task_ws_sending_interval = 1000
 open_ws_limit = 20
+available_markets = [
+    "oz",
+    "wb",
+    "ym",
+    "mm",
+]
+[api.test_token]
+ttl = 86400
+op_limit = 40
+tc_limit = 1
+
 
 [browser]
 users_temp_data_dir = "./users_temp_data"
@@ -57,6 +70,7 @@ ym.wait_for_product_element = """div[data-baobab-name="productSnippet"]"""
 mm.wait_for_product_element = """meta[itemprop="price"]"""
 
 [req_session]
+set_proxy_interval = 14
 launch_sleep = 200
 
 [req_session.timings]
