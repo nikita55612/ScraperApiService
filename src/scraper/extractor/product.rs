@@ -4,18 +4,25 @@ use scraper_dep::Html;
 
 use crate::models::scraper::{
 	ProductData,
+	Product,
 	Symbol
 };
 use super::selectors;
 
 
-pub fn extract_data(symbol: Symbol, content: &str) -> Option<ProductData> {
-	match symbol {
+pub fn extract_data(product: &Product, content: &str) -> Option<ProductData> {
+	let mut opt_pd = match product.symbol {
 		Symbol::OZ => oz_extractor(content),
 		Symbol::WB => wb_extractor(content),
 		Symbol::YM => ym_extractor(content),
 		Symbol::MM => mm_extractor(content)
+	};
+	if let Some(pd) = opt_pd.as_mut() {
+		pd.sku = product.sku.clone();
+		pd.url = product.url.clone();
 	}
+
+	opt_pd
 }
 
 fn oz_extractor(content: &str) -> Option<ProductData> {
