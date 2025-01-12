@@ -17,110 +17,114 @@ use super::super::{
 
 #[derive(Error, Debug)]
 pub enum ApiError {
-    #[error("{{ \"message\": \"Invalid master token has been transferred.\", \"error\": \"InvalidMasterToken\", \"code\": 100 }}")]
+    #[error("{{ \"error\": \"InvalidMasterToken\", \"code\": 101, \"message\": \"Invalid master token provided.\" }}")]
     InvalidMasterToken,
 
-    #[error("{{ \"message\": \"The Authorization header is required but was not included in the request.\", \"error\": \"AuthorizationHeaderMissing\", \"code\": 101 }}")]
-    AuthorizationHeaderMissing,
+    #[error("{{ \"error\": \"MissingAuthorizationHeader\", \"code\": 102, \"message\": \"Missing Authorization header.\" }}")]
+    MissingAuthorizationHeader,
 
-    #[error("{{ \"message\": \"Invalid Authorization header: expected format 'Bearer <token>'.\", \"error\": \"InvalidAuthorizationHeader\", \"code\": 102 }}")]
-    InvalidAuthorizationHeader,
+    #[error("{{ \"error\": \"MalformedAuthorizationHeader\", \"code\": 103, \"message\": \"Invalid Authorization header format. Expected 'Bearer <token>'.\" }}")]
+    MalformedAuthorizationHeader,
 
-    #[error("{{ \"message\": \"Invalid Authorization token was sent.\", \"error\": \"InvalidAuthorizationToken\", \"code\": 103 }}")]
-    InvalidAuthorizationToken,
+    #[error("{{ \"error\": \"InvalidAccessToken\", \"code\": 104, \"message\": \"Invalid access token provided.\" }}")]
+    InvalidAccessToken,
 
-    #[error("{{ \"message\": \"Your Token has expired.\", \"error\": \"TokenLifetimeExceeded\", \"code\": 104 }}")]
-    TokenLifetimeExceeded,
+    #[error("{{ \"error\": \"AccessTokenExpired\", \"code\": 105, \"message\": \"Access token has expired.\" }}")]
+    AccessTokenExpired,
 
-    #[error("{{ \"message\": \"The required URL query parameter '{0}' is missing.\", \"error\": \"MissingUrlQueryParameter\", \"code\": 200 }}")]
+    #[error("{{ \"error\": \"MissingUrlQueryParameter\", \"code\": 200, \"message\": \"Missing required URL query parameter: '{0}'.\" }}")]
     MissingUrlQueryParameter(String),
 
-    #[error("{{ \"message\": \"The value of URL query parameter '{0}' is invalid.\", \"error\": \"InvalidUrlQueryParameter\", \"code\": 201 }}")]
+    #[error("{{ \"error\": \"InvalidUrlQueryParameter\", \"code\": 201, \"message\": \"Invalid value for URL query parameter: '{0}'.\" }}")]
     InvalidUrlQueryParameter(String),
 
-    #[error("{{ \"message\": \"{0}\", \"error\": \"InvalidProxyParameter\", \"code\": 202 }}")]
-    InvalidOrderProxyParameter(String),
+    #[error("{{ \"error\": \"InvalidOrderParameter\", \"code\": 202, \"message\": \"Invalid parameter value for: {0}.\" }}")]
+    InvalidOrderParameter(String),
 
-    #[error("{{ \"message\": \"{0}\", \"error\": \"InvalidProductParameter\", \"code\": 203 }}")]
-    InvalidOrderProductParameter(String),
-
-    #[error("{{ \"message\": \"Failed to deserialize the request body into the order object.\", \"error\": \"InvalidOrderFormat\", \"code\": 204 }}")]
+    #[error("{{ \"error\": \"InvalidOrderFormat\", \"code\": 203, \"message\": \"Failed to deserialize the request body into the order object.\" }}")]
     InvalidOrderFormat,
 
-    #[error("{{ \"message\": \"The order is empty.\", \"error\": \"EmptyOrder\", \"code\": 205 }}")]
+    #[error("{{ \"error\": \"EmptyRequestBody\", \"code\": 204, \"message\": \"Request body is empty. Expected '{0}' structure.\" }}")]
+    EmptyRequestBody(String),
+
+    #[error("{{ \"error\": \"EmptyOrder\", \"code\": 205, \"message\": \"The submitted order is empty.\" }}")]
     EmptyOrder,
 
-    #[error("{{ \"message\": \"The handler queue is full '{0}' and cannot accept new tasks.\", \"error\": \"HandlerQueueOverflow\", \"code\": 300 }}")]
-    HandlerQueueOverflow(u64),
+    #[error("{{ \"error\": \"QueueOverflow\", \"code\": 300, \"message\": \"Handler queue is full. Maximum tasks allowed: '{0}'.\" }}")]
+    QueueOverflow(u64),
 
-    #[error("{{ \"message\": \"The order exceeds the maximum products '{0}' allowed limit.\", \"error\": \"OrderProductsLimitExceeded\", \"code\": 301 }}")]
-    OrderProductsLimitExceeded(u64),
+    #[error("{{ \"error\": \"ProductLimitExceeded\", \"code\": 301, \"message\": \"Order exceeds the maximum product limit: '{0}'.\" }}")]
+    ProductLimitExceeded(u64),
 
-    #[error("{{ \"message\": \"The token has exceeded the limit '{0}' for concurrent order processing.\", \"error\": \"ConcurrencyLimitExceeded\", \"code\": 302 }}")]
+    #[error("{{ \"error\": \"ConcurrencyLimitExceeded\", \"code\": 302, \"message\": \"Token has exceeded the concurrent processing limit: '{0}'.\" }}")]
     ConcurrencyLimitExceeded(u64),
 
-    #[error("{{ \"message\": \"Failed to send the task to the handler.\", \"error\": \"TaskSendFailure\", \"code\": 303 }}")]
-    TaskSendFailure,
+    #[error("{{ \"error\": \"DuplicateTask\", \"code\": 303, \"message\": \"Task with the specified order_hash '{0}' already exists.\" }}")]
+    DuplicateTask(String),
 
-    #[error("{{ \"message\": \"A task with the specified order_hash '{0}' already exists in the handler.\", \"error\": \"TaskAlreadyExists\", \"code\": 304 }}")]
-    TaskAlreadyExists(String),
-
-    #[error("{{ \"message\": \"A task with the specified order_hash does not exist.\", \"error\": \"TaskNotFound\", \"code\": 305 }}")]
-    TaskNotFound,
-
-    #[error("{{ \"message\": \"Cannot establish new WebSocket connection as server has reached maximum limit of '{0}' concurrent connections.\", \"error\": \"WebSocketLimitExceeded\", \"code\": 306 }}")]
+    #[error("{{ \"error\": \"WebSocketLimitExceeded\", \"code\": 304, \"message\": \"Cannot establish new WebSocket connection as server has reached maximum limit of '{0}' concurrent connections.\" }}")]
     WebSocketLimitExceeded(u32),
 
-    #[error("{{ \"message\": \"Token does not exist.\", \"error\": \"TokenDoesNotExist\", \"code\": 400 }}")]
+    #[error("{{ \"error\": \"AccessRestricted\", \"code\": 305, \"message\": \"Access to the method is restricted.\" }}")]
+    AccessRestricted,
+
+    #[error("{{ \"error\": \"TokenDoesNotExist\", \"code\": 400, \"message\": \"Token does not exist.\" }}")]
     TokenDoesNotExist,
 
-    #[error("{{ \"message\": \"Database transaction failed.\", \"error\": \"DatabaseError\", \"code\": 401 }}")]
-    DatabaseError,
+    #[error("{{ \"error\": \"TaskNotFound\", \"code\": 401, \"message\": \"A task with the specified order_hash does not exist.\" }}")]
+    TaskNotFound,
 
-    #[error("{{ \"message\": \"{0}\", \"error\": \"ReqwestSessionError\", \"code\": 500 }}")]
+    #[error("{{ \"error\": \"PathNotFound\", \"code\": 404, \"message\": \"The requested path was not found.\" }}")]
+    PathNotFound,
+
+    #[error("{{ \"error\": \"TaskSendFailure\", \"code\": 500, \"message\": \"Failed to send the task to the handler.\" }}")]
+    TaskSendFailure,
+
+    #[error("{{ \"error\": \"ReqwestSessionError\", \"code\": 501, \"message\": \"{0}.\" }}")]
     ReqwestSessionError(String),
 
-    #[error("{{ \"message\": \"Failed to serialize object.\", \"error\": \"SerializationError\", \"code\": 600 }}")]
+    #[error("{{ \"error\": \"DatabaseError\", \"code\": 502, \"message\": \"Database transaction failed.\" }}")]
+    DatabaseError,
+
+    #[error("{{ \"error\": \"SerializationError\", \"code\": 503, \"message\": \"Failed to serialize object.\" }}")]
     SerializationError,
 
-    #[error("{{ \"message\": \"Failed to deserialize object.\", \"error\": \"DeserializationError\", \"code\": 601 }}")]
-    DeserializationError,
-
-    #[error("{{ \"message\": \"Unknown server error.\", \"error\": \"Unknown\", \"code\": 0 }}")]
-    Unknown
+    #[error("{{ \"error\": \"Unknown\", \"code\": 0, \"message\": \"Unknown server error.\" }}")]
+    UnknownError
 }
 
 impl ApiError {
     fn status_code(&self) -> StatusCode {
         match self {
-            Self::AuthorizationHeaderMissing
+            Self::MissingAuthorizationHeader
             | Self::MissingUrlQueryParameter(_)
             | Self::InvalidUrlQueryParameter(_)
-            | Self::InvalidOrderProxyParameter(_)
-            | Self::InvalidOrderProductParameter(_)
+            | Self::InvalidOrderParameter(_)
             | Self::InvalidOrderFormat
+            | Self::EmptyRequestBody(_)
             | Self::EmptyOrder => StatusCode::BAD_REQUEST,
 
             Self::TaskNotFound
-            | Self::TokenDoesNotExist => StatusCode::NOT_FOUND,
+            | Self::TokenDoesNotExist
+            | Self::PathNotFound => StatusCode::NOT_FOUND,
 
-            Self::HandlerQueueOverflow(_)
-            | Self::TaskAlreadyExists(_)
-            | Self::OrderProductsLimitExceeded(_)
+            Self::QueueOverflow(_)
+            | Self::DuplicateTask(_)
+            | Self::ProductLimitExceeded(_)
             | Self::ConcurrencyLimitExceeded(_)
-            | Self::WebSocketLimitExceeded(_) => StatusCode::CONFLICT,
+            | Self::WebSocketLimitExceeded(_)
+            | Self::AccessRestricted => StatusCode::CONFLICT,
 
             Self::InvalidMasterToken
-            | Self::InvalidAuthorizationHeader
-            | Self::InvalidAuthorizationToken
-            | Self::TokenLifetimeExceeded => StatusCode::UNAUTHORIZED,
+            | Self::MalformedAuthorizationHeader
+            | Self::InvalidAccessToken
+            | Self::AccessTokenExpired => StatusCode::UNAUTHORIZED,
 
-            Self::Unknown
+            Self::UnknownError
             | Self::DatabaseError
             | Self::TaskSendFailure
             | Self::ReqwestSessionError(_)
-            | Self::SerializationError
-            | Self::DeserializationError => StatusCode::INTERNAL_SERVER_ERROR,
+            | Self::SerializationError => StatusCode::INTERNAL_SERVER_ERROR,
 
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -160,10 +164,10 @@ impl From<ValidationError> for ApiError {
     fn from(value: ValidationError) -> Self {
         match value {
             ValidationError::Proxy(e) =>
-                ApiError::InvalidOrderProxyParameter(e.to_string()),
+                ApiError::InvalidOrderParameter(format!("order proxy {}", e)),
 
             ValidationError::Product(e) =>
-                ApiError::InvalidOrderProductParameter(e.to_string()),
+                ApiError::InvalidOrderParameter(format!("order product {}", e)),
         }
     }
 }

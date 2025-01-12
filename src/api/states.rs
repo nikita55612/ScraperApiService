@@ -1,6 +1,9 @@
 #![allow(warnings)]
 use std::{
-    collections::HashMap,
+    collections::{
+        HashMap,
+        HashSet
+    },
     sync::Arc,
 };
 use sqlx::SqlitePool;
@@ -32,6 +35,18 @@ use super::{
 
 
 type OrderHash = String;
+
+pub struct Cache {
+    pub blocked_addrs: HashSet<String>
+}
+
+impl Cache {
+    fn new() -> Self {
+        Self {
+            blocked_addrs: HashSet::new()
+        }
+    }
+}
 
 struct TaskHandler {
     pub task_heap: Arc<RwLock<HashMap<OrderHash, Task>>>,
@@ -74,7 +89,7 @@ impl TaskHandler {
                 let mut stream = task_stream(task.clone()).await;
 
                 while let Some(task) = stream.next().await {
-                    if matches!(task.status, TaskStatus::Completed | TaskStatus::Error) {
+                    if !task.is_done_by_status() {
                         if task_heap.write().await.remove(&order_hash).is_some() {
                             task_heap.write().await.values_mut()
                                 .for_each(|t| t.queue_num -= 1);
@@ -92,9 +107,7 @@ impl TaskHandler {
     pub async fn registering_task(&self, mut task: Task) -> Result<OrderHash, ApiError> {
         let task_count = self.task_heap.read().await.len() as u64;
         if task_count >= self.queue_limit {
-            return Err(
-                ApiError::HandlerQueueOverflow(self.queue_limit)
-            );
+            return Err(ApiError::QueueOverflow(self.queue_limit));
         }
         task.queue_num = task_count;
         let order_hash = task.order_hash.clone();
@@ -109,7 +122,7 @@ impl TaskHandler {
             return Ok(order_hash);
         }
 
-        Err (ApiError::TaskAlreadyExists(order_hash))
+        Err (ApiError::DuplicateTask(order_hash))
     }
 
     pub async fn task_count_by_token_id(&self, token_id: &str) -> usize {
@@ -152,7 +165,8 @@ pub struct AppState {
     pub handlers_count: usize,
     pub handler_queue_limit: usize,
     pub open_ws_counter: Mutex<u32>,
-    pub open_ws_limit: u32
+    pub open_ws_limit: u32,
+    pub cache: Mutex<Cache>
 }
 
 impl AppState {
@@ -177,7 +191,8 @@ impl AppState {
             handlers_count,
             handler_queue_limit,
             open_ws_counter: Mutex::new(0),
-            open_ws_limit
+            open_ws_limit,
+            cache: Mutex::new(Cache::new())
         }
     }
 
@@ -213,7 +228,7 @@ impl AppState {
                 if let Some(task) = th.get_task(order_hash).await {
                     return Ok ( task );
                 }
-                return Err(ApiError::Unknown);
+                return Err(ApiError::UnknownError);
             }
         }
 

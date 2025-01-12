@@ -1,6 +1,9 @@
 #![allow(warnings)]
-use std::sync::Arc;
-use std::path::Path as OsPath;
+use std::{
+    sync::Arc,
+    net::SocketAddr,
+    path::Path as OsPath
+};
 use axum::{
     routing,
     Router
@@ -27,7 +30,7 @@ pub fn get_master_token() -> &'static str {
     })
 }
 
-async fn init() -> Router {
+pub async fn init() -> (tokio::net::TcpListener, Router) {
     let config = cfg::get();
     let assets_path = OsPath::new(
 		&config.api.assets_path
@@ -44,29 +47,9 @@ async fn init() -> Router {
             config.api.open_ws_limit
         ).await
     );
-
-    Router::new()
-        .route("/ping", routing::get(routers::ping))
-        .route("/myip", routing::get(routers::myip))
-
-        .route("/create_token/", routing::post(routers::create_token))
-        .route("/update_token/", routing::post(routers::update_token))
-        .route("/cutout_token/{token_id}", routing::delete(routers::cutout_token))
-
-        .route("/token_info", routing::get(routers::token_info))
-        .route("/token_info/{token_id}", routing::get(routers::token_info_))
-        .route("/state", routing::get(routers::state))
-        .route("/markets", routing::get(routers::markets))
-        .route("/order", routing::post(routers::order))
-        .route("/task/{order_hash}", routing::get(routers::task))
-        .route("/task_ws/{order_hash}", routing::any(routers::task_ws))
-
-        //.route("/api/*path", method_router)
-
-        .with_state(app_state)
-
+    let app = Router::new()
+        .nest("/api/v1", routers::api(app_state))
         .merge(routers::assets())
-
         .route_service(
             "/",
             ServeFile::new(
@@ -77,8 +60,13 @@ async fn init() -> Router {
             ServeFile::new(
                 assets_path.join("404.html")
             )
-        )
+        );
+    let listener = tokio::net::TcpListener::bind(
+        config.server.addr()
+    ).await
+        .expect("Bind TcpListener Error");
 
+    (listener, app)
 }
 
 #[cfg(test)]
@@ -91,11 +79,7 @@ mod tests {
 
 
     async fn run_server() {
-        let app = init().await;
-
-        let listener = tokio::net::TcpListener::bind(
-            cfg::get().server.addr()
-        ).await.unwrap();
+        let (listener, app) = init().await;
 
         tokio::task::spawn(async move {
             axum::serve(
