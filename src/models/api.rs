@@ -52,6 +52,7 @@ pub enum TaskStatus {
     Waiting,
     Processing,
     Completed,
+    Interrupted,
     Error
 }
 
@@ -181,6 +182,15 @@ impl Task {
         }
     }
 
+    pub fn is_done_by_status(&self) -> bool {
+        matches!(
+            self.status,
+            TaskStatus::Completed
+            | TaskStatus::Error
+            | TaskStatus::Interrupted
+        )
+    }
+
     pub fn set_status(&mut self, status: TaskStatus) {
         self.status = status
     }
@@ -241,7 +251,7 @@ impl Task {
         0
     }
 
-    pub fn is_done(&self) -> bool {
+    pub fn is_done_by_progress(&self) -> bool {
         if let Some(progress) = &self.progress {
             return progress.0 == progress.1;
         }

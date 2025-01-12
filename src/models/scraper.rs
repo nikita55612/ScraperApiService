@@ -1,66 +1,73 @@
 #![allow(warnings)]
 use std::collections::HashMap;
-use once_cell::sync::OnceCell;
+use once_cell::sync::Lazy;
 use serde::{
     Deserialize,
     Serialize
 };
 use rand::Rng;
 
-use super::super::scraper::error::ScraperError;
-use super::super::utils::{
-	select_random_product_name,
-	select_random_vendor,
-	select_random_brand,
-	timestamp_now
+use super::super::{
+    config as cfg,
+    scraper::error::ScraperError,
+    utils::{
+        select_random_product_name,
+        select_random_vendor,
+        select_random_brand,
+        timestamp_now
+    }
 };
 
 
-static MARKET_MAP: OnceCell<HashMap<String, Market>> = OnceCell::new();
+pub static AVAILABLE_MARKETS: Lazy<Vec<String>> = Lazy::new(||
+    cfg::get().api.available_markets.clone()
+);
 
-pub fn get_market_map() -> &'static HashMap<String, Market> {
-    MARKET_MAP.get_or_init(|| {
-        HashMap::from([
-            (
-                "oz".into(),
-                Market {
-                    symbol: Symbol::OZ,
-                    name: "Ozon".into(),
-                    url: "https://ozon.ru".into()
-                }
-            ),
-            (
-                "wb".into(),
-                Market {
-                    symbol: Symbol::WB,
-                    name: "Wildberries".into(),
-                    url: "https://www.wildberries.ru/".into()
-                }
-            ),
-            (
-                "ym".into(),
-                Market {
-                    symbol: Symbol::YM,
-                    name: "YandexMarket".into(),
-                    url: "https://market.yandex.ru/".into()
-                }
-            ),
-            (
-                "mm".into(),
-                Market {
-                    symbol: Symbol::MM,
-                    name: "MegaMarket".into(),
-                    url: "https://megamarket.ru/".into()
-                }
-            ),
-        ])
-    })
-}
+pub static MARKET_MAP: Lazy<HashMap<String, Market>> = Lazy::new(|| {
+    HashMap::from([
+        (
+            "oz".into(),
+            Market {
+                name: "Ozon".into(),
+                url: "https://ozon.ru".into(),
+                available: AVAILABLE_MARKETS.contains(&"oz".into())
+            }
+        ),
+        (
+            "wb".into(),
+            Market {
+                name: "Wildberries".into(),
+                url: "https://www.wildberries.ru/".into(),
+                available: AVAILABLE_MARKETS.contains(&"wb".into())
+            }
+        ),
+        (
+            "ym".into(),
+            Market {
+                name: "YandexMarket".into(),
+                url: "https://market.yandex.ru/".into(),
+                available: AVAILABLE_MARKETS.contains(&"ym".into())
+            }
+        ),
+        (
+            "mm".into(),
+            Market {
+                name: "MegaMarket".into(),
+                url: "https://megamarket.ru/".into(),
+                available: AVAILABLE_MARKETS.contains(&"mm".into())
+            }
+        ),
+    ])
+});
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
 pub struct ProductData {
+    pub sku: String,
+
 	#[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+
+    pub url: String,
 
 	#[serde(skip_serializing_if = "Option::is_none")]
     pub price: Option<u64>,
@@ -150,7 +157,7 @@ pub enum Symbol {
     OZ,
     WB,
     YM,
-    MM,
+    MM
 }
 
 impl Symbol {
@@ -169,23 +176,24 @@ impl Symbol {
             Self::OZ => "oz",
             Self::WB => "wb",
             Self::YM => "ym",
-            Self::MM => "mm",
+            Self::MM => "mm"
         }
     }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Market {
-    pub symbol: Symbol,
     pub name: String,
     pub url: String,
+    pub available: bool
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Product {
     pub symbol: Symbol,
     pub id: String,
-    pub url: String,
+    pub sku: String,
+    pub url: String
 }
 
 impl Product {
@@ -205,19 +213,19 @@ impl Product {
             },
             Symbol::MM => format!("https://megamarket.ru/promo-page/details/#?slug={}", id),
         };
+        let sku = match symbol {
+            Symbol::YM => id.splitn(3, '-')
+                .nth(1)
+                .unwrap()
+                .into(),
+            _ => id.to_string()
+        };
 
         Self {
             id: id.into(),
             symbol,
-            url,
-        }
-    }
-
-    pub fn from_url(url: &str) -> Self {
-        Self {
-            symbol: Symbol::OZ,
-            id: String::new(),
-            url: String::new()
+            sku,
+            url
         }
     }
 
