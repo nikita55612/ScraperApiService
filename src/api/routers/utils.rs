@@ -1,15 +1,20 @@
 use std::collections::HashMap;
-
-use axum::http::HeaderMap;
 use reqwest::header;
+use axum::{
+    body::Bytes,
+    http::HeaderMap
+};
 
 use crate::{
 	api::{
 		app::get_master_token,
-		error::ApiError,
-		database as db
+        database as db,
+        error::ApiError
 	},
-	models::api::Token
+	models::api::{
+        Order,
+        Token
+    }
 };
 
 
@@ -17,10 +22,10 @@ pub fn extract_token_from_headers(headers: &HeaderMap) -> Result<&str, ApiError>
     let auth_header = headers
 		.get(header::AUTHORIZATION)
 		.and_then(|header| header.to_str().ok())
-		.ok_or(ApiError::AuthorizationHeaderMissing)?;
+		.ok_or(ApiError::MissingAuthorizationHeader)?;
 	match auth_header.strip_prefix("Bearer ") {
         Some(token) => Ok(token),
-        None => Err(ApiError::InvalidAuthorizationHeader)
+        None => Err(ApiError::MalformedAuthorizationHeader)
     }
 }
 
@@ -38,10 +43,10 @@ pub async fn verify_token(token_id: &str, db_pool: &db::Pool) -> Result<Token, A
         db_pool,
         token_id
     ).await?
-        .ok_or(ApiError::InvalidAuthorizationToken)?;
+        .ok_or(ApiError::InvalidAccessToken)?;
     if token.is_expired() {
         return Err(
-            ApiError::TokenLifetimeExceeded
+            ApiError::AccessTokenExpired
         );
     }
 
@@ -77,4 +82,16 @@ pub fn get_query_param<'a>(
     )
 }
 
-//pub fn order_validation(order: Order)
+pub fn extract_and_handle_order_from_body(body: &Bytes) -> Result<Order, ApiError> {
+    if body.is_empty() {
+        return Err(ApiError::EmptyRequestBody("Order".into()));
+    }
+    let mut order = serde_json::from_slice::<Order>(&body)
+        .map_err(|_| ApiError::InvalidOrderFormat)?;
+    if order.products.is_empty() {
+        return Err(ApiError::EmptyOrder);
+    }
+    order.remove_duplicates();
+
+    Ok(order)
+}

@@ -13,6 +13,7 @@ use std::{
     path::Path as OsPath,
 };
 use axum::{
+    routing,
     body::Bytes,
     extract::{
         ws::{
@@ -44,7 +45,8 @@ use utils::{
     get_query_param,
 	verify_master_token,
 	new_token_from_query,
-	extract_token_from_headers
+	extract_token_from_headers,
+    extract_and_handle_order_from_body,
 };
 
 use super::{
@@ -62,7 +64,7 @@ use super::{
                 TaskProgress,
                 ApiState
             },
-            scraper::get_market_map,
+            scraper::MARKET_MAP,
             validation::Validation
         },
     },
@@ -72,6 +74,35 @@ use super::{
 static TASK_WS_SENDING_INTERVAL: Lazy<u64> = Lazy::new(
     || cfg::get().api.task_ws_sending_interval
 );
+
+pub fn api(app_state: Arc<AppState>) -> Router {
+    Router::new()
+        .route("/create_token/", routing::post(create_token))
+        .route("/update_token/", routing::post(update_token))
+        .route("/cutout_token/{token_id}", routing::delete(cutout_token))
+
+        .route("/token_info", routing::get(token_info))
+        .route("/token_info/{token_id}", routing::get(token_info_))
+        .route("/test_token", routing::get(test_token))
+
+        .route("/state", routing::get(state))
+
+        .route("/order", routing::post(order))
+        .route("/task/{order_hash}", routing::get(task).post(task))
+        .route("/task_ws/{order_hash}", routing::any(task_ws))
+
+        .with_state(app_state)
+
+        .route("/valid_order", routing::get(valid_order))
+        .route("/routers", routing::get(routers))
+        .route("/config", routing::get(config))
+        .route("/markets", routing::get(markets))
+
+        .route("/ping", routing::get(ping))
+        .route("/myip", routing::get(myip))
+
+        .fallback(api_fallback)
+}
 
 pub fn assets() -> Router {
 	let assets_path = OsPath::new(
@@ -93,22 +124,33 @@ pub fn assets() -> Router {
 	assets_router
 }
 
-pub async fn hello_world() -> &'static str {
+static TEST_TOKEN: Lazy<Token> = Lazy::new(
+    || {
+        let test_token_cfg = &cfg::get().api.test_token;
+        Token::new(
+            test_token_cfg.ttl,
+            test_token_cfg.op_limit,
+            test_token_cfg.tc_limit
+        )
+    }
+);
+
+async fn hello_world() -> &'static str {
     "Hello world!"
 }
 
-pub async fn ping() -> &'static str {
+async fn ping() -> &'static str {
     "pong"
 }
 
-pub async fn myip(
+async fn myip(
     ConnectInfo(addr): ConnectInfo<SocketAddr>
 ) -> String {
     addr.to_string()
 }
 
 #[debug_handler]
-pub async fn create_token(
+async fn create_token(
     headers: HeaderMap,
     State(state): State<Arc<AppState>>,
     Query(query): Query<HashMap<String, String>>,
@@ -123,7 +165,7 @@ pub async fn create_token(
 }
 
 #[debug_handler]
-pub async fn cutout_token(
+async fn cutout_token(
     headers: HeaderMap,
     State(state): State<Arc<AppState>>,
     Path(token_id): Path<String>,
@@ -145,7 +187,7 @@ pub async fn cutout_token(
 }
 
 #[debug_handler]
-pub async fn update_token(
+async fn update_token(
     headers: HeaderMap,
     State(state): State<Arc<AppState>>,
     Query(query): Query<HashMap<String, String>>,
@@ -161,7 +203,7 @@ pub async fn update_token(
 }
 
 #[debug_handler]
-pub async fn token_info(
+async fn token_info(
     headers: HeaderMap,
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, ApiError> {
@@ -181,7 +223,7 @@ pub async fn token_info(
 }
 
 #[debug_handler]
-pub async fn token_info_(
+async fn token_info_(
     headers: HeaderMap,
     State(state): State<Arc<AppState>>,
     Path(token_id): Path<String>
@@ -201,19 +243,28 @@ pub async fn token_info_(
 }
 
 #[debug_handler]
-pub async fn test_token(
+async fn test_token(
     State(state): State<Arc<AppState>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>
 ) -> Result<Response, ApiError> {
 
-    let test_token = Token::new(86400, 100, 1);
+    let mut cache_lock = state.cache.lock().await;
+    if !cache_lock.blocked_addrs.insert(addr.to_string()) {
+        return Err (ApiError::AccessRestricted);
+    }
+    let test_token = TEST_TOKEN.clone();
     db::insert_token(&state.db_pool, &test_token).await?;
 
 	Ok ((StatusCode::CREATED, Json(test_token)).into_response())
 }
 
 #[debug_handler]
-pub async fn state(
+async fn config() -> Result<Response, ApiError> {
+    Ok ((StatusCode::OK, Json(cfg::get())).into_response())
+}
+
+#[debug_handler]
+async fn state(
     State(state): State<Arc<AppState>>
 ) -> Result<Response, ApiError> {
 
@@ -229,12 +280,12 @@ pub async fn state(
 }
 
 #[debug_handler]
-pub async fn markets() -> Result<Response, ApiError> {
-    Ok ((StatusCode::OK, Json(get_market_map())).into_response())
+async fn markets() -> Result<Response, ApiError> {
+    Ok ((StatusCode::OK, Json(MARKET_MAP.clone())).into_response())
 }
 
 #[debug_handler]
-pub async fn order(
+async fn order(
     headers: HeaderMap,
     State(state): State<Arc<AppState>>,
     body: Bytes,
@@ -242,33 +293,36 @@ pub async fn order(
 
     let token_id = extract_token_from_headers(&headers)?;
     let token = verify_token(token_id, &state.db_pool).await?;
-
-    let mut order = serde_json::from_slice::<Order>(&body)
-        .map_err(|_| ApiError::InvalidOrderFormat)?;
-    if order.products.is_empty() {
-        return Err (ApiError::EmptyOrder);
-    }
-    order.remove_duplicates();
+    let mut order = extract_and_handle_order_from_body(&body)?;
     if order.products.len() > token.op_limit as usize {
-        return Err(
-            ApiError::OrderProductsLimitExceeded(token.op_limit)
-        );
+        return Err(ApiError::ProductLimitExceeded(token.op_limit));
     }
     if state.task_count_by_token_id(token_id).await > token.tc_limit as usize {
-        return Err(
-            ApiError::ConcurrencyLimitExceeded(token.tc_limit)
-        );
+        return Err(ApiError::ConcurrencyLimitExceeded(token.tc_limit));
     }
     order.validation()?;
     order.token_id = token_id.into();
-    println!("{:#?}", order);
     let order_hash = state.insert_order(order).await?;
 
     Ok ((StatusCode::OK, order_hash).into_response())
 }
 
 #[debug_handler]
-pub async fn task(
+async fn valid_order(
+    body: Bytes,
+) -> Result<Response, ApiError> {
+
+    let mut order = extract_and_handle_order_from_body(&body)?;
+    if order.products.len() > 1000 {
+        return Err(ApiError::ProductLimitExceeded(1000));
+    }
+    order.validation()?;
+
+    Ok ((StatusCode::OK, Json(order)).into_response())
+}
+
+#[debug_handler]
+async fn task(
     headers: HeaderMap,
     State(state): State<Arc<AppState>>,
     Path(order_hash): Path<String>
@@ -282,7 +336,7 @@ pub async fn task(
 }
 
 #[debug_handler]
-pub async fn task_ws(
+async fn task_ws(
     ws: WebSocketUpgrade,
     headers: HeaderMap,
     State(state): State<Arc<AppState>>,
@@ -355,4 +409,109 @@ async fn handle_task_ws(
     state.close_websocket().await;
 }
 
-//pub async fn product_from_url()
+pub async fn routers() -> Response {
+    let json_routers = serde_json::json!(
+        {
+            "root_path": "/api/v1",
+            "routers": [
+                {
+                    "path": "/token_info",
+                    "method": "GET",
+                    "description": "Retrieves information about a token based on the token in the headers.",
+                    "auth": true,
+                    "response_type": "application/json"
+                },
+                {
+                    "path": "/token_info/{token_id}",
+                    "method": "GET",
+                    "description": "Retrieves information about a specific token by its ID.",
+                    "auth": false,
+                    "response_type": "application/json"
+                },
+                {
+                    "path": "/test_token",
+                    "method": "GET",
+                    "description": "Tests token creation and stores it in the database.",
+                    "auth": false,
+                    "response_type": "application/json"
+                },
+                {
+                    "path": "/state",
+                    "method": "GET",
+                    "description": "Returns the current state of the API, including handlers and queue information.",
+                    "auth": false,
+                    "response_type": "application/json"
+                },
+                {
+                    "path": "/order",
+                    "method": "POST",
+                    "description": "Creates an order and validates its content.",
+                    "auth": true,
+                    "response_type": "text/plain"
+                },
+                {
+                    "path": "/task/{order_hash}",
+                    "method": "GET, POST",
+                    "description": "Retrieves or modifies a task's state by its order hash.",
+                    "auth": true,
+                    "response_type": "application/json"
+                },
+                {
+                    "path": "/task_ws/{order_hash}",
+                    "method": "ANY",
+                    "description": "Opens a WebSocket connection to track task states.",
+                    "auth": true,
+                    "response_type": "websocket"
+                },
+                {
+                    "path": "/valid_order",
+                    "method": "GET",
+                    "description": "Order validation.",
+                    "auth": false,
+                    "response_type": "application/json"
+                },
+                {
+                    "path": "/routers",
+                    "method": "GET",
+                    "description": "Lists available routes in the API.",
+                    "auth": false,
+                    "response_type": "application/json"
+                },
+                {
+                    "path": "/config",
+                    "method": "GET",
+                    "description": "Retrieves the current configuration of the system.",
+                    "auth": false,
+                    "response_type": "application/json"
+                },
+                {
+                    "path": "/markets",
+                    "method": "GET",
+                    "description": "Information about available markets.",
+                    "auth": false,
+                    "response_type": "application/json"
+                },
+                {
+                    "path": "/ping",
+                    "method": "GET",
+                    "description": "A health check endpoint.",
+                    "auth": false,
+                    "response_type": "text/plain"
+                },
+                {
+                    "path": "/myip",
+                    "method": "GET",
+                    "description": "Returns the IP address of the client.",
+                    "auth": false,
+                    "response_type": "text/plain"
+                }
+            ]
+        }
+    );
+
+    (StatusCode::OK, Json(json_routers)).into_response()
+}
+
+pub async fn api_fallback() -> Response {
+    ApiError::PathNotFound.into_response()
+}
