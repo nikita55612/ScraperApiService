@@ -7,13 +7,16 @@ use super::{
         ReqSession,
         ReqMethod
     },
-    super::models::{
-        scraper::ProductData,
-        api::{
-            Task,
-            TaskProgress,
-            TaskResult,
-            TaskStatus
+    super::{
+        config as cfg,
+        models::{
+            scraper::ProductData,
+            api::{
+                Task,
+                TaskProgress,
+                TaskResult,
+                TaskStatus
+            }
         }
     }
 };
@@ -25,13 +28,13 @@ use super::{
 
 pub async fn task_stream(mut task: Task) -> impl Stream<Item = Task> {
     let order_data = task.extract_order_data();
-    let req_session = ReqSession::new(
+    let req_session_res = ReqSession::new(
+        &cfg::get().req_session,
         ReqMethod::Combined,
         &order_data.cookies,
         order_data.proxy_pool
     ).await;
-
-    match req_session {
+    match req_session_res {
         Ok(rs) => {
             task.init_progress();
             task.set_status(TaskStatus::Processing);
@@ -42,9 +45,10 @@ pub async fn task_stream(mut task: Task) -> impl Stream<Item = Task> {
             task.set_result_error(e.to_string());
         }
     };
+    //req_session_res.unwrap().close().await;
 
     let stream = stream! {
-        while !matches!(task.status, TaskStatus::Completed | TaskStatus::Error) {
+        while !task.is_done_by_status() {
 
             let order_item = order_data.products.get(
                 task.get_curr_step() as usize
@@ -56,7 +60,7 @@ pub async fn task_stream(mut task: Task) -> impl Stream<Item = Task> {
             task.insert_result_item(order_item, product_result);
 
             task.next_progress_step();
-            if task.is_done() {
+            if task.is_done_by_progress() {
                 task.set_status(TaskStatus::Completed);
             }
             yield task.clone();
@@ -64,5 +68,36 @@ pub async fn task_stream(mut task: Task) -> impl Stream<Item = Task> {
         }
         yield task;
     };
+
     Box::pin(stream)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_api() {
+        let products = vec![
+            "123".to_string(),
+            "444".to_string(),
+            "12344".to_string(),
+            "44411".to_string(),
+            "12311".to_string(),
+            "44466".to_string(),
+        ];
+        // Нахождение товара для озон и запрос этого товара для подгрузки cookis
+        if let Some(p) = products.iter().find(|p| p.starts_with("4")) {
+            println!("{p}")
+        }
+
+        let status = false;
+
+        while status {
+            println!("status");
+            break;
+        }
+
+        // Обязательна проверка состояний последних запросов. Если последние 10 запросов закончились неудачей прервать обработку заказа
+    }
 }

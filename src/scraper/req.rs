@@ -23,7 +23,10 @@ use super::{
 	error::ReqSessionError,
 	extractor::product::extract_data,
 	super::{
-		config as cfg,
+		config::{
+			self as cfg,
+			ReqSession as ReqSessionConfig
+		},
 		utils::is_port_open,
 		models::{
 			api::OrderCookieParam,
@@ -185,11 +188,10 @@ pub struct ReqSession {
 
 impl ReqSession {
 	pub async fn new(
-
+		config: &ReqSessionConfig,
 		method: ReqMethod,
 		cookies: &Vec<OrderCookieParam>,
 		proxy_pool: Vec<String>
-
 	) -> Result<Self, ReqSessionError> {
 		let req_client = if matches!(
 			method, ReqMethod::Reqwest | ReqMethod::Combined
@@ -215,7 +217,7 @@ impl ReqSession {
 				);
 			}
 
-			let req_timings = &cfg::get().req_session.timings;
+			let req_timings = &config.timings;
 			let mut req_client_builder = reqwest::Client::builder()
 				.user_agent(random_user_agent())
 				.cookie_provider(jar)
@@ -301,7 +303,7 @@ impl ReqSession {
 
 		sleep(
 			Duration::from_millis(
-				cfg::get().req_session.launch_sleep
+				config.launch_sleep
 			)
 		).await;
 
@@ -324,17 +326,25 @@ impl ReqSession {
 		let url = product.get_parse_url();
 		let content = match product.symbol {
 			Symbol::OZ | Symbol::YM | Symbol::MM => {
-				let page_parsm = get_product_page_param(
+				let mut page_parsm = get_product_page_param(
 					product.symbol.as_str()
-				);
-				self.browser_get_content(&url, page_parsm).await?
+				).clone();
+				if self.proxy_pool.len() > 1 {
+					if (self.req_count + 1) % self.set_proxy_interval as usize == 0 {
+						let index = (
+							self.req_count / self.set_proxy_interval as usize
+							) % self.proxy_pool.len();
+						page_parsm.proxy = Some(&self.proxy_pool[index]);
+					}
+				}
+				self.browser_get_content(&url, &page_parsm).await?
 			},
 			Symbol::WB => {
 				self.reqwest_get_content(&url).await?
 			}
 		};
 		let product_data = extract_data(
-			product.symbol.clone(),
+			product,
 			&content
 		);
 		self.req_count += 1;
@@ -402,7 +412,12 @@ mod tests {
 		println!("run test_req_session...");
 		println!("{:?}", get_browser_states());
 		//sleep(Duration::from_millis(10000)).await;
-        let mut rs = ReqSession::new(ReqMethod::Combined, &vec![], vec![])
+        let mut rs = ReqSession::new(
+				&cfg::get().req_session,
+				ReqMethod::Combined,
+				&vec![],
+				vec![]
+			)
 			.await
 			.unwrap();
 		println!("run ReqSession...");
@@ -445,4 +460,16 @@ mod tests {
 		println!("{:?}", get_browser_states());
         assert_eq!(true, true);
     }
+
+	#[tokio::test]
+    async fn test_proxy_pool() {
+		let proxy_pool: Vec<i32> = vec![1];
+		let set_proxy_interval = 8;
+		for req_count in (0..122) {
+			if (req_count + 1) % set_proxy_interval == 0 {
+				let index = (req_count / set_proxy_interval) % proxy_pool.len();
+				println!("n[{}] index {} = {}", req_count, index, proxy_pool[index])
+			}
+		}
+	}
 }
