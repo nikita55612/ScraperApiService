@@ -1,6 +1,8 @@
 #![allow(warnings)]
-use std::{collections::HashMap, path::Path};
-
+use std::{
+    collections::HashMap,
+    path::Path
+};
 use once_cell::sync::OnceCell;
 use serde::{
     Deserialize,
@@ -56,6 +58,12 @@ pub fn get() -> &'static Config {
 
 pub fn init() {
     let config = get();
+    if let Some(pub_env) = &config.pub_env {
+        for (key, value) in pub_env.iter() {
+            log::info!("[SET_PUB_ENV_VAR] {}={}", key, value);
+            std::env::set_var(key, value);
+        }
+    }
     if let Some(env) = &config.env {
         for (key, value) in env.iter() {
             log::info!("[SET_ENV_VAR] {}={}", key, value);
@@ -73,16 +81,8 @@ pub fn init() {
     if dotenv::dotenv().is_err() {
         log::warn!(".env file not found");
     }
-    if let Ok(mt) = std::env::var("MASTER_TOKEN") {
-        log::info!("MASTER_TOKEN={}", mt)
-    } else {
+    if let Err(mt) = std::env::var("MASTER_TOKEN") {
         log::error!("Env var MASTER_TOKEN not defined");
-        panic!();
-    }
-    if let Ok(mt) = std::env::var("VERSION") {
-        log::info!("VERSION={}", mt)
-    } else {
-        log::error!("Env var VERSION not defined");
         panic!();
     }
 }
@@ -91,6 +91,7 @@ pub fn init() {
 pub struct Config {
     #[serde(skip_serializing)]
     env: Option<Vec<(String, String)>>,
+    pub pub_env: Option<Vec<(String, String)>>,
     pub server: Server,
     pub api: Api,
     pub browser: Browser,
@@ -117,7 +118,9 @@ pub struct Api {
     pub handlers_count: usize,
     pub handler_queue_limit: usize,
     pub task_ws_sending_interval: u64,
-    pub open_ws_limit: u32
+    pub open_ws_limit: u32,
+    pub test_token: TestToken,
+    pub available_markets: Vec<String>
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -138,6 +141,7 @@ pub struct Browser {
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct ReqSession {
+    pub set_proxy_interval: u64,
     pub launch_sleep: u64,
     pub timings: ReqTimings,
 }
@@ -155,6 +159,13 @@ pub struct DeBrowserTimings {
     pub set_proxy_sleep: u64,
     pub action_sleep: u64,
     pub page_goto_timeout: u64,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct TestToken {
+    pub ttl: u64,
+    pub op_limit: u64,
+    pub tc_limit: u64
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone)]
@@ -188,7 +199,14 @@ impl Default for Api {
             handlers_count: 1,
             handler_queue_limit: 10,
             task_ws_sending_interval: 1000,
-            open_ws_limit: 20
+            open_ws_limit: 20,
+            test_token: TestToken::default(),
+            available_markets: vec![
+                "oz".into(),
+                "wb".into(),
+                "ym".into(),
+                "mm".into()
+            ]
         }
     }
 }
@@ -228,6 +246,7 @@ impl Default for DeBrowserTimings {
 impl Default for ReqSession {
     fn default() -> Self {
         Self {
+            set_proxy_interval: 14,
             launch_sleep: 700,
             timings: ReqTimings::default()
         }
@@ -240,6 +259,16 @@ impl Default for ReqTimings {
             timeout: 700,
             conn_timeout: 500,
             read_timeout: 500
+        }
+    }
+}
+
+impl Default for TestToken {
+    fn default() -> Self {
+        Self {
+            ttl: 86400,
+            tc_limit: 40,
+            op_limit: 1
         }
     }
 }
@@ -302,6 +331,7 @@ mod tests {
     #[test]
     fn test_init_config() {
         println!("{:#?}", get());
+        init();
         assert_eq!(true, true);
     }
 }
