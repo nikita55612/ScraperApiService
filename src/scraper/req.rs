@@ -3,15 +3,18 @@ use std::{
 	collections::HashMap, sync::Arc, thread::panicking, time::Duration
 };
 use browser_bridge::{
+	chromiumoxide::{
+		Page,
+		cdp::browser_protocol::network::{
+			CookieParam as BrowserCookieParam,
+			CookieSameSite as BrowserCookieSameSite
+		}
+	},
 	random_user_agent,
 	BrowserError,
 	BrowserSession,
 	BrowserSessionConfig,
-	PageParam,
-	chromiumoxide::cdp::browser_protocol::network::{
-		CookieParam as BrowserCookieParam,
-		CookieSameSite as BrowserCookieSameSite
-	}
+	PageParam
 };
 use tokio::{
 	time::sleep,
@@ -183,6 +186,7 @@ pub struct ReqSession {
 	req_client: Option<reqwest::Client>,
 	proxy_pool: Vec<String>,
 	set_proxy_interval: u8,
+	close_tabs_interval: u16,
 	req_count: usize
 }
 
@@ -312,7 +316,8 @@ impl ReqSession {
 				browser,
 				req_client,
 				proxy_pool,
-				set_proxy_interval: 0,
+				set_proxy_interval: config.set_proxy_interval as u8,
+				close_tabs_interval: config.close_tabs_interval as u16,
 				req_count: 0
 			}
 		)
@@ -322,7 +327,9 @@ impl ReqSession {
 		&mut self,
 		product: &Product
 	) -> Result<Option<ProductData>, ReqSessionError> {
-
+		if (self.req_count + 1) % self.close_tabs_interval as usize == 0 {
+			let _ = self.browser_close_tabs().await;
+		}
 		let url = product.get_parse_url();
 		let content = match product.symbol {
 			Symbol::OZ | Symbol::YM | Symbol::MM => {
@@ -358,7 +365,23 @@ impl ReqSession {
 		page_parsm: &PageParam<'_>
 	) -> Result<String, ReqSessionError> {
 
-		let page = self.browser
+		let page = self.browser_open_page(
+			url, page_parsm
+		).await?;
+		let content = page.content()
+			.await
+			.map_err(|e| BrowserError::from(e))?;
+		let _ = page.close().await;
+
+		Ok (content)
+	}
+
+	pub async fn browser_open_page(
+		&self,
+		url: &str,
+		page_parsm: &PageParam<'_>
+	) -> Result<Page, ReqSessionError> {
+		self.browser
 			.as_ref()
 			.ok_or(ReqSessionError::NotAvailableReqMethod)?
 			.session
@@ -366,13 +389,18 @@ impl ReqSession {
 				url,
 				page_parsm
 			)
-			.await?;
-		let content = page.content()
 			.await
-			.map_err(|e| BrowserError::from(e))?;
-		let _ = page.close().await;
+			.map_err(|e| e.into())
+	}
 
-		Ok (content)
+	pub async fn browser_close_tabs(&self) -> Result<(), ReqSessionError> {
+		self.browser
+			.as_ref()
+			.ok_or(ReqSessionError::NotAvailableReqMethod)?
+			.session
+			.close_tabs()
+			.await
+			.map_err(|e| e.into())
 	}
 
 	pub async fn reqwest_get_content(&self, url: &str) -> Result<String, ReqSessionError> {
