@@ -1,55 +1,29 @@
-import asyncio
-from websockets.asyncio.client import connect
+from websockets.sync.client import connect
 import requests
 
-TOKEN_ID = "rs.SUyISUT06JWFY8AWEDLNVnvZHnLJU65K4"
 
-async def ws():
-    async with connect("ws://localhost:5050/test_ws") as websocket:
-        try:
-            while (msg := await websocket.recv()):
-                print(msg)
-        except Exception as _:
-            print("Connection closed...")
+TOKEN = "rs.Ma8whFSr5prfQVfHhChnBXIYl"
+MASTER_TOKEN = "1234"
+DOMEN = "http://localhost:5050"
+API_URL = f"{DOMEN}/api/v1"
 
 def create_token():
     print("create_token")
     headers = {
-        "Authorization": "Bearer 123"
+        "Authorization": f"Bearer {MASTER_TOKEN}"
     }
     params = {
         "ttl": 1000000,
         "op_limit": 20000,
         "tc_limit": 20
     }
-    res = requests.post("http://localhost:5050/create_token/", headers=headers, params=params)
-    print(res.text)
-
-def cutout_token():
-    print("cutout_token")
-    headers = {
-        "Authorization": "Bearer 123"
-    }
-    res = requests.delete("http://localhost:5050/cutout_token/rs.c8zY0IJpwoMQPw6neiJntdbJwRUOufl3h", headers=headers)
-    print(res.text)
-
-def token_info():
-    print("token_info")
-    headers = {
-        "Authorization": "Bearer rs.c8zY0IJpwoMQPw6neiJntdbJwRUOufl3h"
-    }
-    res = requests.get("http://localhost:5050/token_info", headers=headers)
-    print(res.text)
-
-def token_info_():
-    print("token_info_")
-    res = requests.get("http://localhost:5050/token_info/rs.SUyISUT06JWFY8AWEDLNVnvZHnLJU65K4")
-    print(res.text)
+    res = requests.post(f"{API_URL}/create_token/", headers=headers, params=params)
+    print(res.json())
 
 def update_token():
     print("update_token")
     headers = {
-        "Authorization": "Bearer 123"
+        "Authorization": f"Bearer {MASTER_TOKEN}"
     }
     params = {
         "id": "rs.SUyISUT06JWFY8AWEDLNVnvZHnLJU65K4",
@@ -57,28 +31,100 @@ def update_token():
         "op_limit": 21000,
         "tc_limit": 19
     }
-    res = requests.post("http://localhost:5050/update_token/", headers=headers, params=params)
+    res = requests.post(f"{API_URL}/update_token/", headers=headers, params=params)
+    print(res.json())
+
+def cutout_token():
+    print("cutout_token")
+    headers = {
+        "Authorization": f"Bearer {MASTER_TOKEN}"
+    }
+    res = requests.delete(f"{API_URL}/cutout_token/rs.c8zY0IJpwoMQPw6neiJntdbJwRUOufl3h", headers=headers)
+    print(res.json())
+
+def token_info():
+    print("token_info")
+    headers = {
+        "Authorization": f"Bearer {TOKEN}"
+    }
+    res = requests.get(f"{API_URL}/token_info", headers=headers)
+    print(res.json())
+
+def token_info_():
+    print("token_info_")
+    res = requests.get(f"{API_URL}/token_info/rs.SUyISUT06JWFY8AWEDLNVnvZHnLJU65K4")
+    print(res.json())
+
+def test_token():
+    print("test_token")
+    res = requests.get(f"{API_URL}/test_token")
     print(res.text)
 
 def state():
     print("state")
-    res = requests.get("http://localhost:5050/state")
-    print(res.text)
+    res = requests.get(f"{API_URL}/state")
+    print(res.json())
 
 def markets():
     print("markets")
-    res = requests.get("http://localhost:5050/markets")
+    res = requests.get(f"{API_URL}/markets")
     print(res.text)
 
 def ping():
     print("ping")
-    res = requests.get("http://localhost:5050/ping")
-    print(res.text)
+    res = requests.get(f"{API_URL}/ping")
+    print(res.json())
 
 def myip():
     print("myip")
-    res = requests.get("http://localhost:5050/myip")
-    print(res.text)
+    res = requests.get(f"{API_URL}/myip")
+    print(res.json())
+
+def task_ws(order_hash):
+	headers = {
+		"Authorization": f"Bearer {TOKEN}"
+	}
+	with connect(f"ws://localhost:5050/api/v1/task_ws/{order_hash}", additional_headers=headers) as task_ws:
+		try:
+			while (task := task_ws.recv()):
+				print(task)
+		except Exception as _:
+			print("Connection closed...")
+
+def task_(order_hash):
+	print("task")
+	headers = {
+		"Authorization": f"Bearer {TOKEN}"
+	}
+
+	res = requests.post(f"{API_URL}/task/{order_hash}", headers=headers)
+	print(res.text)
+	return res.text
+
+def order():
+	print("order")
+	headers = {
+		"Authorization": f"Bearer {TOKEN}"
+	}
+	order = {
+		"products": [
+			"ym/1732949807-100352880819-5997015",
+			"oz/1596079870",
+			"oz/1793879666",
+			"wb/145700662",
+		],
+		"proxyPool": [
+			"1kpF8S:GPnFUb@147.45.62.117:8000"
+		]
+	}
+
+	res = requests.post(f"{API_URL}/order", headers=headers, json=order)
+	print(res.text)
+
+	return res.text
 
 if __name__ == "__main__":
-    create_token()
+	import time
+
+	test_token()
+	#task_ws(order_hash)

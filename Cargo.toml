@@ -1,6 +1,6 @@
 [package]
-name = "scraper_api_service"
-version = "0.1.0"
+name = "rust_scraper_api"
+version = "1.0.0"
 edition = "2021"
 
 [dependencies]
@@ -29,3 +29,6 @@ tokio-stream = "0.1.16"
 toml = "0.8.19"
 tower-http = { version = "0.6.2", features = ["fs", "trace"] }
 uuid = { version = "1.11.0", features = ["v4", "fast-rng"] }
+indexmap = { version = "2.7.0", features = ["serde"] }
+utoipa = { version = "5.3.1", features = ["axum_extras"] }
+utoipa-swagger-ui = { version = "8.1.1", features = ["axum"] }

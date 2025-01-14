@@ -1,11 +1,11 @@
 env = [
-    ["MASTER_TOKEN", "123"],
+    ["MASTER_TOKEN", "1234"],
 ]
 pub_env = [
     ["VERSION", "v1.0.0"],
-    ["LAST_UPDATE", "07:01:2025"],
-    ["GITHUB", "1"],
-    ["CONTACT", "1"],
+    ["LAST_UPDATE", "1/14/25"],
+    ["GITHUB", "-"],
+    ["CONTACT", "https://t.me/Nikita5612"],
     ["LANG", "Rust"],
     ["WEB_DEP", "axum==0.7.9"],
 ]
@@ -22,6 +22,7 @@ handlers_count = 1
 handler_queue_limit = 10
 task_ws_sending_interval = 1000
 open_ws_limit = 20
+interrupt_check_step = 60
 available_markets = [
     "oz",
     "wb",
@@ -71,6 +72,7 @@ mm.wait_for_product_element = """meta[itemprop="price"]"""
 
 [req_session]
 set_proxy_interval = 14
+close_tabs_interval = 40
 launch_sleep = 200
 
 [req_session.timings]
