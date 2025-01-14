@@ -4,6 +4,7 @@ use std::{
     path::Path
 };
 use once_cell::sync::OnceCell;
+use utoipa::ToSchema;
 use serde::{
     Deserialize,
     Deserializer,
@@ -87,10 +88,11 @@ pub fn init() {
     }
 }
 
-#[derive(Deserialize, Serialize, Default, Debug, Clone)]
+#[derive(Deserialize, Serialize, Default, Debug, Clone, ToSchema)]
 pub struct Config {
     #[serde(skip_serializing)]
     env: Option<Vec<(String, String)>>,
+    #[schema(value_type = Option<Vec<Vec<String>>>)]
     pub pub_env: Option<Vec<(String, String)>>,
     pub server: Server,
     pub api: Api,
@@ -98,7 +100,7 @@ pub struct Config {
     pub req_session: ReqSession
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 pub struct Server {
     pub host: String,
     pub port: u16
@@ -110,7 +112,7 @@ impl Server {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 pub struct Api {
     pub assets_path: String,
     pub db_path: String,
@@ -120,10 +122,11 @@ pub struct Api {
     pub task_ws_sending_interval: u64,
     pub open_ws_limit: u32,
     pub test_token: TestToken,
+    pub interrupt_check_step: u64,
     pub available_markets: Vec<String>
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 pub struct Browser {
     pub executable: Option<String>,
     pub users_temp_data_dir: String,
@@ -139,21 +142,22 @@ pub struct Browser {
     pub page_param: BrowserPageParam
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 pub struct ReqSession {
     pub set_proxy_interval: u64,
+    pub close_tabs_interval: u64,
     pub launch_sleep: u64,
     pub timings: ReqTimings,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 pub struct ReqTimings {
     pub timeout: u64,
     pub conn_timeout: u64,
     pub read_timeout: u64
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 pub struct DeBrowserTimings {
     pub launch_sleep: u64,
     pub set_proxy_sleep: u64,
@@ -161,14 +165,14 @@ pub struct DeBrowserTimings {
     pub page_goto_timeout: u64,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 pub struct TestToken {
     pub ttl: u64,
     pub op_limit: u64,
     pub tc_limit: u64
 }
 
-#[derive(Deserialize, Serialize, Default, Debug, Clone)]
+#[derive(Deserialize, Serialize, Default, Debug, Clone, ToSchema)]
 pub struct BrowserPageParam {
     pub rand_user_agent: bool,
     pub wait_for_element_timeout: u64,
@@ -176,7 +180,7 @@ pub struct BrowserPageParam {
     pub symbol: HashMap<String, SymbolPageParam>
 }
 
-#[derive(Deserialize, Serialize, Default, Debug, Clone)]
+#[derive(Deserialize, Serialize, Default, Debug, Clone, ToSchema)]
 pub struct SymbolPageParam {
     pub wait_for_product_element: Option<String>
 }
@@ -201,6 +205,7 @@ impl Default for Api {
             task_ws_sending_interval: 1000,
             open_ws_limit: 20,
             test_token: TestToken::default(),
+            interrupt_check_step: 60,
             available_markets: vec![
                 "oz".into(),
                 "wb".into(),
@@ -247,6 +252,7 @@ impl Default for ReqSession {
     fn default() -> Self {
         Self {
             set_proxy_interval: 14,
+            close_tabs_interval: 40,
             launch_sleep: 700,
             timings: ReqTimings::default()
         }
