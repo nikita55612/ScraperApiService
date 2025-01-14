@@ -90,14 +90,14 @@ impl TaskHandler {
 
                 while let Some(task) = stream.next().await {
                     if !task.is_done_by_status() {
+                        task_heap.write().await.insert(order_hash.clone(), task);
+                    } else {
                         if task_heap.write().await.remove(&order_hash).is_some() {
                             task_heap.write().await.values_mut()
                                 .for_each(|t| t.queue_num -= 1);
                         }
 
                         let _ = db::insert_task(&db_pool, &task).await;
-                    } else {
-                        task_heap.write().await.insert(order_hash.clone(), task);
                     }
                 }
             }
@@ -226,7 +226,7 @@ impl AppState {
         for th in self.task_handlers.iter() {
             if th.contains_task(order_hash).await {
                 if let Some(task) = th.get_task(order_hash).await {
-                    return Ok ( task );
+                    return Ok(task);
                 }
                 return Err(ApiError::UnknownError);
             }

@@ -7,6 +7,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
+use utoipa::ToSchema;
 use thiserror::Error;
 
 use super::super::{
@@ -15,8 +16,11 @@ use super::super::{
 };
 
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, ToSchema)]
 pub enum ApiError {
+    #[error("{{ \"error\": \"Unknown\", \"code\": 0, \"message\": \"Unknown server error.\" }}")]
+    UnknownError,
+
     #[error("{{ \"error\": \"InvalidMasterToken\", \"code\": 101, \"message\": \"Invalid master token provided.\" }}")]
     InvalidMasterToken,
 
@@ -88,9 +92,6 @@ pub enum ApiError {
 
     #[error("{{ \"error\": \"SerializationError\", \"code\": 503, \"message\": \"Failed to serialize object.\" }}")]
     SerializationError,
-
-    #[error("{{ \"error\": \"Unknown\", \"code\": 0, \"message\": \"Unknown server error.\" }}")]
-    UnknownError
 }
 
 impl ApiError {
@@ -130,11 +131,12 @@ impl ApiError {
         }
     }
 
-    fn to_json(&self) -> serde_json::Value {
+    pub fn to_json(&self) -> serde_json::Value {
         serde_json::from_str(&self.to_string()).unwrap_or_else(|_| {
             serde_json::json!({
+                "error": "InvalidErrorFormat",
+                "code": 99,
                 "message": "An error occurred.",
-                "error": "InvalidErrorFormat"
             })
         })
     }

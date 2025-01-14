@@ -152,7 +152,7 @@ pub async fn task_exists(pool: &Pool, order_hash: &str) -> Result<bool> {
 
 pub async fn cutout_task(pool: &Pool, order_hash: &str) -> Result<Task> {
     let task_data: (String,) = sqlx::query_as(
-        "DELETE FROM completed_tasks WHERE id = ? RETURNING data"
+        "DELETE FROM completed_tasks WHERE order_hash = ? RETURNING data"
         )
         .bind(order_hash)
         .fetch_one(pool)
@@ -163,7 +163,7 @@ pub async fn cutout_task(pool: &Pool, order_hash: &str) -> Result<Task> {
 
 pub async fn cutout_string_task(pool: &Pool, order_hash: &str) -> Result<String> {
     let task_data: (String,) = sqlx::query_as(
-        "DELETE FROM completed_tasks WHERE id = ? RETURNING data"
+        "DELETE FROM completed_tasks WHERE order_hash = ? RETURNING data"
         )
         .bind(order_hash)
         .fetch_one(pool)

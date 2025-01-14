@@ -10,13 +10,17 @@ use axum::{
 };
 use once_cell::sync::OnceCell;
 use tower_http::services::ServeFile;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 use super::super::config as cfg;
 use super::states::AppState;
 use super::database as db;
+use super::doc::ApiDoc;
 use super::routers;
 
 
+pub const ROOT_API_PATH: &'static str = "/api/v1";
 const DEFAULT_MASTER_TOKEN: &'static str = "ARk9dD6EjWRylJ4i2cPbW3sOjw7TTY529sIDiRSpXmAEiRdJ5IKjaOfcRLAXM7Q6p5LJsYsaUyCVmJhZ6q0jXGK0Yd1r2WI1wLEB0AJcTqqj6g7FBcOY06q8kfXzcsrM";
 static MASTER_TOKEN: OnceCell<String> = OnceCell::new();
 
@@ -48,7 +52,10 @@ pub async fn init() -> (tokio::net::TcpListener, Router) {
         ).await
     );
     let app = Router::new()
-        .nest("/api/v1", routers::api(app_state))
+        .nest(ROOT_API_PATH, routers::api(app_state))
+        .merge(SwaggerUi::new("/swagger-ui")
+            .url("/api/v1/openapi.json", ApiDoc::openapi())
+        )
         .merge(routers::assets())
         .route_service(
             "/",
