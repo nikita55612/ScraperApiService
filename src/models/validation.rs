@@ -129,7 +129,8 @@ impl Validation for Order {
 	type Error = ValidationError;
 
 	fn validation(&mut self) -> Result<(), Self::Error> {
-		for proxy in self.proxy_pool.iter() {
+		for proxy in self.proxy_pool.iter_mut() {
+			*proxy = proxy.trim().into();
             proxy_str_validation(proxy)
 				.map_err(|e| ValidationError::Proxy(e))?;
         }
@@ -144,9 +145,10 @@ impl Validation for Order {
 		// 	}
         // }
 		for product in self.products.iter_mut() {
-			*product = product_str_validation(product)
+			*product = product_str_validation(product.trim())
 				.map_err(|e| ValidationError::Product(e))?;
 		}
+		self.remove_duplicates();
 
 		Ok(())
 	}
@@ -214,7 +216,7 @@ fn product_str_validation(s: &str) -> Result<String, InvalidProduct> {
 			return Err(InvalidProduct::InvalidProductUrl(s.into()));
 		}
 	} else {
-		let parts = s.trim().split_once('/')
+		let parts = s.split_once('/')
 			.ok_or(InvalidProduct::InvalidProductFormat(s.into()))?;
 		(parts.0, parts.1.into())
 	};
@@ -241,7 +243,7 @@ fn product_str_validation(s: &str) -> Result<String, InvalidProduct> {
 			}
 		}
 	}
-	let valid = format!("{}/{}", id, symbol.as_str());
+	let valid = format!("{}/{}", symbol.as_str(), id);
 	if valid.len() < 7 {
 		return Err(InvalidProduct::InvalidProductId(id));
 	}

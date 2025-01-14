@@ -1,32 +1,46 @@
 #![allow(warnings)]
-use std::collections::HashMap;
+use indexmap::IndexMap;
+use utoipa::ToSchema;
 use serde::{
     Serialize,
     Deserialize
 };
 
-use super::super::models::scraper::ProductData;
-use super::super::api::error::ApiError;
-use super::super::utils::{
-    remove_duplicates,
-    create_token_id,
-    timestamp_now,
-    sha1_hash
+use super::{
+    validation::Validation,
+    super::{
+        models::scraper::ProductData,
+        api::error::ApiError,
+        utils::{
+            remove_duplicates,
+            create_token_id,
+            timestamp_now,
+            sha1_hash
+        }
+    }
 };
-use super::validation::Validation;
 
 
 type OrderHash = String;
 
-#[derive(Clone, Debug, PartialEq, sqlx::FromRow, Serialize, Deserialize)]
+/// Параметры токена
+#[derive(Clone, Debug, PartialEq, sqlx::FromRow, Serialize, Deserialize, ToSchema)]
 pub struct Token {
     pub id: String,
+
 	#[serde(rename="createdAt")]
+    /// Дата и время создания токена в timestamp
     pub created_at: u64,
+
+    /// Время жизни токена в секундах
     pub ttl: u64,
+
     #[serde(rename="orderProductsLimit")]
+    /// Лимит токена на количество товаров в заказе
     pub op_limit: u64,
+
     #[serde(rename="taskCountLimit")]
+    /// Лимит токена на количество параллельных обработок заказа
     pub tc_limit: u64
 }
 
@@ -46,7 +60,7 @@ impl Token {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, ToSchema)]
 #[serde(rename_all="lowercase")]
 pub enum TaskStatus {
     Waiting,
@@ -59,21 +73,24 @@ pub enum TaskStatus {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all="lowercase")]
 pub enum TaskResult {
-    Data(HashMap<String, Option<ProductData>>),
-    Error(String)
+    Data(IndexMap<String, Option<ProductData>>),
+    Error(serde_json::Value)
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default, ToSchema)]
 #[serde(default)]
 pub struct Order {
 	#[serde(skip)]
+    #[schema(ignore)]
     pub token_id: String,
+
     pub products: Vec<String>,
+
 	#[serde(rename="proxyPool")]
     pub proxy_pool: Vec<String>,
+
     //#[serde(rename="proxyMap")]
     //pub proxy_map: HashMap<String, Vec<String>>,
-	#[serde(rename="cookies")]
 	pub cookies: Vec<OrderCookieParam>,
 }
 
@@ -102,21 +119,29 @@ impl Order {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, ToSchema)]
 pub struct OrderCookieParam {
     pub name: String,
+
     pub value: String,
+
     pub url: String,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub domain: Option<String>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+
     #[serde(rename="httpOnly", skip_serializing_if = "Option::is_none")]
     pub http_only: Option<bool>,
+
     #[serde(rename="sameSite", skip_serializing_if = "Option::is_none")]
     pub same_site: Option<String>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub secure: Option<bool>
+
 }
 
 #[derive(Clone, Debug, Default)]
@@ -127,20 +152,26 @@ pub struct OrderExtractData {
 	pub cookies: Vec<OrderCookieParam>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, ToSchema)]
 pub struct Task {
     #[serde(skip)]
     pub order: Order,
+
     #[serde(skip)]
     pub order_hash: OrderHash,
 
     #[serde(rename="queueNum")]
     pub queue_num: u64,
+
     pub status: TaskStatus,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub progress: Option<TaskProgress>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(schema_with = serde_json::Value::default)]
     pub result: Option<TaskResult>,
+
     #[serde(rename="createdAt")]
     pub created_at: u64,
 }
@@ -155,7 +186,7 @@ impl PartialEq for Task {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, ToSchema)]
 pub struct TaskProgress(u64, u64);
 
 impl TaskProgress {
@@ -198,14 +229,14 @@ impl Task {
     pub fn init_result_data(&mut self) {
         self.result = Some(
             TaskResult::Data(
-                HashMap::new()
+                IndexMap::new()
             )
         )
     }
 
-    pub fn set_result_error(&mut self, error: String) {
+    pub fn set_result_error(&mut self, error: ApiError) {
         self.result = Some(
-            TaskResult::Error(error)
+            TaskResult::Error(error.to_json())
         )
     }
 
@@ -218,6 +249,16 @@ impl Task {
         };
 
         extract_data
+    }
+
+    pub fn extract_result_data(&mut self) -> Option<&IndexMap<String, Option<ProductData>>> {
+        if let Some(
+            TaskResult::Data(ref_data)
+        ) = &self.result {
+            return Some(ref_data);
+        }
+
+        None
     }
 
     pub fn insert_result_item(&mut self, k: String, v: Option<ProductData>) {
@@ -253,18 +294,25 @@ impl Task {
 
     pub fn is_done_by_progress(&self) -> bool {
         if let Some(progress) = &self.progress {
-            return progress.0 == progress.1;
+            return progress.0 >= progress.1;
         }
 
         false
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+/// Состояние API
+#[derive(Serialize, Deserialize, Clone, Debug, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct ApiState {
+    /// Количество параллельных обработчиков
     pub handlers_count: usize,
+    /// Лимит очереди задач для всех обработчиков
     pub tasks_queue_limit: usize,
+    /// Текущая загруженность очереди
     pub curr_task_queue: usize,
+    /// Лимит на количество открытых WebSockets
     pub open_ws_limit: u32,
+    /// Открыто WebSockets на данный момент
     pub curr_open_ws: u32
 }

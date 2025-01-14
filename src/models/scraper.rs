@@ -1,6 +1,7 @@
 #![allow(warnings)]
 use std::collections::HashMap;
 use once_cell::sync::Lazy;
+use utoipa::ToSchema;
 use serde::{
     Deserialize,
     Serialize
@@ -181,7 +182,7 @@ impl Symbol {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
 pub struct Market {
     pub name: String,
     pub url: String,
