@@ -40,6 +40,7 @@ use axum::{
 };
 use tower_http::services::ServeFile;
 use axum_macros::debug_handler;
+use utoipa::OpenApi;
 use utils::{
 	verify_token,
     get_query_param,
@@ -49,22 +50,29 @@ use utils::{
     extract_and_handle_order_from_body,
 };
 
+
 use super::{
+    doc::ApiDoc,
     states::AppState,
     error::ApiError,
     database as db,
+    app::ROOT_API_PATH,
     super::{
         utils::list_dir,
         config as cfg,
         models::{
             api::{
+                Task,
                 Order,
                 Token,
                 TaskStatus,
                 TaskProgress,
                 ApiState
             },
-            scraper::MARKET_MAP,
+            scraper::{
+                Market,
+                MARKET_MAP
+            },
             validation::Validation
         },
     },
@@ -77,27 +85,26 @@ static TASK_WS_SENDING_INTERVAL: Lazy<u64> = Lazy::new(
 
 pub fn api(app_state: Arc<AppState>) -> Router {
     Router::new()
-        .route("/create_token/", routing::post(create_token))
-        .route("/update_token/", routing::post(update_token))
-        .route("/cutout_token/{token_id}", routing::delete(cutout_token))
+        .route("/create-token/", routing::post(create_token))
+        .route("/update-token/", routing::post(update_token))
+        .route("/cutout-token/{token_id}", routing::delete(cutout_token))
 
-        .route("/token_info", routing::get(token_info))
-        .route("/token_info/{token_id}", routing::get(token_info_))
-        .route("/test_token", routing::get(test_token))
+        .route("/token-info", routing::get(token_info))
+        .route("/token-info/{token_id}", routing::get(token_info_))
+        .route("/test-token", routing::get(test_token))
 
         .route("/state", routing::get(state))
 
         .route("/order", routing::post(order))
         .route("/task/{order_hash}", routing::get(task).post(task))
-        .route("/task_ws/{order_hash}", routing::any(task_ws))
+        .route("/task-ws/{order_hash}", routing::any(task_ws))
+        .route("/valid-order", routing::post(valid_order).get(valid_order))
 
         .with_state(app_state)
 
-        .route("/valid_order", routing::get(valid_order))
-        .route("/routers", routing::get(routers))
         .route("/config", routing::get(config))
         .route("/markets", routing::get(markets))
-
+        //.route("/openapi.json", routing::get(openapi))
         .route("/ping", routing::get(ping))
         .route("/myip", routing::get(myip))
 
@@ -135,10 +142,6 @@ static TEST_TOKEN: Lazy<Token> = Lazy::new(
     }
 );
 
-async fn hello_world() -> &'static str {
-    "Hello world!"
-}
-
 async fn ping() -> &'static str {
     "pong"
 }
@@ -147,6 +150,10 @@ async fn myip(
     ConnectInfo(addr): ConnectInfo<SocketAddr>
 ) -> String {
     addr.to_string()
+}
+
+async fn openapi() -> Response {
+    (StatusCode::OK, Json(ApiDoc::openapi())).into_response()
 }
 
 #[debug_handler]
@@ -259,14 +266,14 @@ async fn test_token(
 }
 
 #[debug_handler]
-async fn config() -> Result<Response, ApiError> {
-    Ok ((StatusCode::OK, Json(cfg::get())).into_response())
+async fn config() -> Response {
+    (StatusCode::OK, Json(cfg::get())).into_response()
 }
 
 #[debug_handler]
 async fn state(
     State(state): State<Arc<AppState>>
-) -> Result<Response, ApiError> {
+) -> Response {
 
     let api_state = ApiState {
         handlers_count: state.handlers_count,
@@ -276,12 +283,12 @@ async fn state(
         curr_open_ws: *state.open_ws_counter.lock().await
     };
 
-    Ok ((StatusCode::OK, Json(api_state)).into_response())
+    (StatusCode::OK, Json(api_state)).into_response()
 }
 
 #[debug_handler]
-async fn markets() -> Result<Response, ApiError> {
-    Ok ((StatusCode::OK, Json(MARKET_MAP.clone())).into_response())
+async fn markets() -> Response {
+    (StatusCode::OK, Json(MARKET_MAP.clone())).into_response()
 }
 
 #[debug_handler]
@@ -309,9 +316,13 @@ async fn order(
 
 #[debug_handler]
 async fn valid_order(
+    headers: HeaderMap,
+    State(state): State<Arc<AppState>>,
     body: Bytes,
 ) -> Result<Response, ApiError> {
 
+    let token_id = extract_token_from_headers(&headers)?;
+    let _ = verify_token(token_id, &state.db_pool).await?;
     let mut order = extract_and_handle_order_from_body(&body)?;
     if order.products.len() > 1000 {
         return Err(ApiError::ProductLimitExceeded(1000));
@@ -409,109 +420,6 @@ async fn handle_task_ws(
     state.close_websocket().await;
 }
 
-pub async fn routers() -> Response {
-    let json_routers = serde_json::json!(
-        {
-            "root_path": "/api/v1",
-            "routers": [
-                {
-                    "path": "/token_info",
-                    "method": "GET",
-                    "description": "Retrieves information about a token based on the token in the headers.",
-                    "auth": true,
-                    "response_type": "application/json"
-                },
-                {
-                    "path": "/token_info/{token_id}",
-                    "method": "GET",
-                    "description": "Retrieves information about a specific token by its ID.",
-                    "auth": false,
-                    "response_type": "application/json"
-                },
-                {
-                    "path": "/test_token",
-                    "method": "GET",
-                    "description": "Tests token creation and stores it in the database.",
-                    "auth": false,
-                    "response_type": "application/json"
-                },
-                {
-                    "path": "/state",
-                    "method": "GET",
-                    "description": "Returns the current state of the API, including handlers and queue information.",
-                    "auth": false,
-                    "response_type": "application/json"
-                },
-                {
-                    "path": "/order",
-                    "method": "POST",
-                    "description": "Creates an order and validates its content.",
-                    "auth": true,
-                    "response_type": "text/plain"
-                },
-                {
-                    "path": "/task/{order_hash}",
-                    "method": "GET, POST",
-                    "description": "Retrieves or modifies a task's state by its order hash.",
-                    "auth": true,
-                    "response_type": "application/json"
-                },
-                {
-                    "path": "/task_ws/{order_hash}",
-                    "method": "ANY",
-                    "description": "Opens a WebSocket connection to track task states.",
-                    "auth": true,
-                    "response_type": "websocket"
-                },
-                {
-                    "path": "/valid_order",
-                    "method": "GET",
-                    "description": "Order validation.",
-                    "auth": false,
-                    "response_type": "application/json"
-                },
-                {
-                    "path": "/routers",
-                    "method": "GET",
-                    "description": "Lists available routes in the API.",
-                    "auth": false,
-                    "response_type": "application/json"
-                },
-                {
-                    "path": "/config",
-                    "method": "GET",
-                    "description": "Retrieves the current configuration of the system.",
-                    "auth": false,
-                    "response_type": "application/json"
-                },
-                {
-                    "path": "/markets",
-                    "method": "GET",
-                    "description": "Information about available markets.",
-                    "auth": false,
-                    "response_type": "application/json"
-                },
-                {
-                    "path": "/ping",
-                    "method": "GET",
-                    "description": "A health check endpoint.",
-                    "auth": false,
-                    "response_type": "text/plain"
-                },
-                {
-                    "path": "/myip",
-                    "method": "GET",
-                    "description": "Returns the IP address of the client.",
-                    "auth": false,
-                    "response_type": "text/plain"
-                }
-            ]
-        }
-    );
-
-    (StatusCode::OK, Json(json_routers)).into_response()
-}
-
-pub async fn api_fallback() -> Response {
+async fn api_fallback() -> Response {
     ApiError::PathNotFound.into_response()
 }
