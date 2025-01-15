@@ -1,4 +1,3 @@
-#![allow(warnings)]
 use sqlx::{
     sqlite::SqlitePoolOptions,
     migrate::MigrateDatabase,
@@ -90,16 +89,16 @@ pub async fn update_token(pool: &Pool, token: &Token) -> Result<()> {
     Ok(())
 }
 
-pub async fn token_exists(pool: &Pool, token_id: &str) -> Result<bool> {
-    let row: Option<(i64,)> = sqlx::query_as(
-        "SELECT 1 FROM tokens WHERE id = ?;"
-        )
-        .bind(token_id)
-        .fetch_optional(pool)
-        .await?;
+// pub async fn token_exists(pool: &Pool, token_id: &str) -> Result<bool> {
+//     let row: Option<(i64,)> = sqlx::query_as(
+//         "SELECT 1 FROM tokens WHERE id = ?;"
+//         )
+//         .bind(token_id)
+//         .fetch_optional(pool)
+//         .await?;
 
-    Ok(row.is_some())
-}
+//     Ok(row.is_some())
+// }
 
 pub async fn read_token(pool: &Pool, token_id: &str) -> Result<Option<Token>> {
     let token: Option<Token> = sqlx::query_as(
@@ -139,16 +138,16 @@ pub async fn insert_task(
     Ok(())
 }
 
-pub async fn task_exists(pool: &Pool, order_hash: &str) -> Result<bool> {
-    let row: Option<(i64,)> = sqlx::query_as(
-        "SELECT 1 FROM completed_tasks WHERE id = ?;"
-        )
-        .bind(order_hash)
-        .fetch_optional(pool)
-        .await?;
+// pub async fn task_exists(pool: &Pool, order_hash: &str) -> Result<bool> {
+//     let row: Option<(i64,)> = sqlx::query_as(
+//         "SELECT 1 FROM completed_tasks WHERE id = ?;"
+//         )
+//         .bind(order_hash)
+//         .fetch_optional(pool)
+//         .await?;
 
-    Ok(row.is_some())
-}
+//     Ok(row.is_some())
+// }
 
 pub async fn cutout_task(pool: &Pool, order_hash: &str) -> Result<Task> {
     let task_data: (String,) = sqlx::query_as(
@@ -161,24 +160,21 @@ pub async fn cutout_task(pool: &Pool, order_hash: &str) -> Result<Task> {
     Ok(serde_json::from_str(&task_data.0).unwrap())
 }
 
-pub async fn cutout_string_task(pool: &Pool, order_hash: &str) -> Result<String> {
-    let task_data: (String,) = sqlx::query_as(
-        "DELETE FROM completed_tasks WHERE order_hash = ? RETURNING data"
-        )
-        .bind(order_hash)
-        .fetch_one(pool)
-        .await?;
+// pub async fn cutout_string_task(pool: &Pool, order_hash: &str) -> Result<String> {
+//     let task_data: (String,) = sqlx::query_as(
+//         "DELETE FROM completed_tasks WHERE order_hash = ? RETURNING data"
+//         )
+//         .bind(order_hash)
+//         .fetch_one(pool)
+//         .await?;
 
-    Ok(task_data.0)
-}
+//     Ok(task_data.0)
+// }
 
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::time::sleep;
-    use std::collections::HashMap;
-    use std::time::Duration;
     use crate::models::api as models;
     use crate::utils;
 
@@ -237,16 +233,6 @@ mod tests {
         assert_eq!(true, true);
     }
 
-    #[tokio::test]
-    async fn test_db_token_exists() {
-        let pool = init().await.unwrap();
-        let token_id = "ss.81240d5c7b7e461db5c3b9a1c7b9b8f5";
-        assert_eq!(
-            token_exists(&pool, token_id).await.ok(),
-            Some(true)
-        );
-    }
-
     fn create_task() -> Task {
         let order = models::Order {
             token_id: utils::create_token_id(),
@@ -296,20 +282,5 @@ mod tests {
             println!("{:?}", task);
         }
         assert_eq!(insert_task_result.is_ok(), true);
-    }
-
-    #[tokio::test]
-    async fn test_db_task_exists() {
-        let pool = init().await.unwrap();
-        let task = create_task();
-        println!("{:?}", task);
-        let _ = insert_task(
-            &pool,
-            &task
-        ).await;
-        assert_eq!(
-            task_exists(&pool, &task.order_hash).await.unwrap(),
-            true
-        );
     }
 }

@@ -1,6 +1,5 @@
 use once_cell::sync::Lazy;
 use serde::Serialize;
-use serde_json::json;
 use utoipa::{
 	openapi::{
 		self,
@@ -14,7 +13,6 @@ use utoipa::{
 	OpenApi
 };
 
-use crate::models::api;
 
 use super::{
     super::{
@@ -33,8 +31,7 @@ use super::{
             scraper::Market
         }
     },
-    error::ApiError,
-    routers
+    error::ApiError
 };
 
 
@@ -69,7 +66,7 @@ pub static API_DESCRIPTION: Lazy<String> = Lazy::new(|| {
 });
 
 const DEFAULT_API_DESCRIPTION: &'static str = r#"
-Дата публикации: **1/14/25**
+Дата публикации: **1/16/25**
 
 # Документация API
 
@@ -281,6 +278,7 @@ pub struct ApiDoc;
         (status = 200, description = "openapi.json", content_type = "application/json")
     )
 )]
+#[allow(dead_code)]
 fn openapi() {}
 
 #[utoipa::path(
@@ -297,6 +295,7 @@ fn openapi() {}
         (status = 200, description = "pong", content_type = "text/plain")
     )
 )]
+#[allow(dead_code)]
 fn ping() {}
 
 #[utoipa::path(
@@ -313,6 +312,7 @@ fn ping() {}
         (status = 200, description = "SocketAddr", content_type = "text/plain")
     )
 )]
+#[allow(dead_code)]
 fn myip() {}
 
 ////////////////////////////
@@ -369,6 +369,7 @@ print(response.json())
         example = json!({"error":"Unknown","code":0,"message":"Unknown server error."}))
     )
 )]
+#[allow(dead_code)]
 fn token_info() {}
 
 #[utoipa::path(
@@ -421,6 +422,7 @@ print(response.json())
         example = json!({"error":"Unknown","code":0,"message":"Unknown server error."}))
     )
 )]
+#[allow(dead_code)]
 fn token_info_() {}
 
 #[utoipa::path(
@@ -469,6 +471,7 @@ print(token_data)  # Информация о тестовом токене
         example = json!({"error":"Unknown","code":0,"message":"Unknown server error."}))
     )
 )]
+#[allow(dead_code)]
 fn test_token() {}
 
 ////////////////////////////
@@ -488,6 +491,7 @@ fn test_token() {}
         (status = 200, description = "Конфигурация API", body = Config, content_type = "application/json")
     )
 )]
+#[allow(dead_code)]
 fn config() {}
 
 #[utoipa::path(
@@ -508,6 +512,7 @@ fn config() {}
         (status = 200, description = "Состояние API", body = ApiState, content_type = "application/json")
     )
 )]
+#[allow(dead_code)]
 fn state() {}
 
 ////////////////////////////
@@ -537,6 +542,7 @@ fn state() {}
     )
     )
 )]
+#[allow(dead_code)]
 fn markets() {}
 
 ////////////////////////////
@@ -642,6 +648,7 @@ print(f"Order hash: {order_hash}")
         example = json!({"error":"Unknown","code":0,"message":"Unknown server error."}))
     )
 )]
+#[allow(dead_code)]
 fn order() {}
 
 #[utoipa::path(
@@ -733,6 +740,7 @@ print(validated_order)
         example = json!({"error":"Unknown","code":0,"message":"Unknown server error."}))
     )
 )]
+#[allow(dead_code)]
 fn valid_order() {}
 
 #[utoipa::path(
@@ -797,6 +805,7 @@ while task["status"] in ("waiting", "processing"):
         example = json!({"error":"Unknown","code":0,"message":"Unknown server error."}))
     )
 )]
+#[allow(dead_code)]
 fn task() {}
 
 #[utoipa::path(
@@ -862,6 +871,7 @@ with connect(f"ws://domain/api/v1/task-ws/{order_hash}", additional_headers=head
         example = json!({"error":"Unknown","code":0,"message":"Unknown server error."}))
     )
 )]
+#[allow(dead_code)]
 fn task_ws() {}
 
 #[cfg(test)]

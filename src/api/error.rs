@@ -1,4 +1,3 @@
-#![allow(warnings)]
 use axum::{
     response::{
         IntoResponse,
@@ -126,8 +125,6 @@ impl ApiError {
             | Self::TaskSendFailure
             | Self::ReqwestSessionError(_)
             | Self::SerializationError => StatusCode::INTERNAL_SERVER_ERROR,
-
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -151,7 +148,7 @@ impl IntoResponse for ApiError {
 }
 
 impl From<sqlx::Error> for ApiError {
-    fn from(value: sqlx::Error) -> Self {
+    fn from(_: sqlx::Error) -> Self {
         ApiError::DatabaseError
     }
 }

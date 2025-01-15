@@ -1,4 +1,3 @@
-#![allow(warnings)]
 use std::{
     collections::{
         HashMap,
@@ -26,11 +25,8 @@ use super::{
     super::models::api::{
         Order,
         Task,
-        TaskStatus,
-        Token,
     },
     super::scraper::stream::task_stream,
-    super::config as cfg,
 };
 
 
@@ -52,7 +48,7 @@ struct TaskHandler {
     pub task_heap: Arc<RwLock<HashMap<OrderHash, Task>>>,
     pub queue_limit: u64,
     pub sender: Sender<OrderHash>,
-    pub join_handle: JoinHandle<()>
+    //pub join_handle: JoinHandle<()>
 }
 
 impl TaskHandler {
@@ -64,7 +60,7 @@ impl TaskHandler {
         );
         let (sender,
             receiver) = mpsc::channel::<OrderHash>(queue_limit);
-        let join_handle = Self::spawn_handler(
+        let _join_handle = Self::spawn_handler(
             db_pool,
             receiver,
             task_heap.clone()
@@ -74,7 +70,7 @@ impl TaskHandler {
             task_heap: task_heap,
             queue_limit: queue_limit as u64,
             sender,
-            join_handle
+            //join_handle
         }
     }
 
@@ -143,25 +139,25 @@ impl TaskHandler {
             .map(|t| t.clone())
     }
 
-    pub async fn with_task<R>(&self, key: &String, f: impl FnOnce(&Task) -> R) -> Option<R> {
-        self.task_heap.read()
-            .await
-            .get(key)
-            .map(f)
-    }
+    // pub async fn with_task<R>(&self, key: &String, f: impl FnOnce(&Task) -> R) -> Option<R> {
+    //     self.task_heap.read()
+    //         .await
+    //         .get(key)
+    //         .map(f)
+    // }
 
     pub async fn len(&self) -> usize {
         self.task_heap.read().await.len()
     }
 
-    pub async fn abort(&self) {
-        self.join_handle.abort();
-    }
+    // pub async fn abort(&self) {
+    //     self.join_handle.abort();
+    // }
 }
 
 pub struct AppState {
     pub db_pool: Arc<db::Pool>,
-    pub task_handlers: Vec<TaskHandler>,
+    task_handlers: Vec<TaskHandler>,
     pub handlers_count: usize,
     pub handler_queue_limit: usize,
     pub open_ws_counter: Mutex<u32>,
