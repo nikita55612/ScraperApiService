@@ -1,4 +1,3 @@
-#![allow(warnings)]
 mod utils;
 use tokio::time::{
     sleep,
@@ -13,7 +12,9 @@ use std::{
     path::Path as OsPath,
 };
 use axum::{
+    Router,
     routing,
+    middleware,
     body::Bytes,
     extract::{
         ws::{
@@ -22,7 +23,6 @@ use axum::{
         },
         WebSocketUpgrade,
         ConnectInfo,
-        Request,
         State,
         Query,
         Path,
@@ -35,14 +35,14 @@ use axum::{
         IntoResponse,
         Json,
         Response,
+        Html
     },
-    Router,
 };
 use tower_http::services::ServeFile;
 use axum_macros::debug_handler;
-use utoipa::OpenApi;
 use utils::{
 	verify_token,
+    log_middleware,
     get_query_param,
 	verify_master_token,
 	new_token_from_query,
@@ -52,27 +52,18 @@ use utils::{
 
 
 use super::{
-    doc::ApiDoc,
     states::AppState,
     error::ApiError,
     database as db,
-    app::ROOT_API_PATH,
     super::{
         utils::list_dir,
         config as cfg,
         models::{
             api::{
-                Task,
-                Order,
                 Token,
-                TaskStatus,
-                TaskProgress,
                 ApiState
             },
-            scraper::{
-                Market,
-                MARKET_MAP
-            },
+            scraper::MARKET_MAP,
             validation::Validation
         },
     },
@@ -85,6 +76,8 @@ static TASK_WS_SENDING_INTERVAL: Lazy<u64> = Lazy::new(
 
 pub fn api(app_state: Arc<AppState>) -> Router {
     Router::new()
+        .route("/state", routing::get(state))
+
         .route("/create-token/", routing::post(create_token))
         .route("/update-token/", routing::post(update_token))
         .route("/cutout-token/{token_id}", routing::delete(cutout_token))
@@ -93,8 +86,6 @@ pub fn api(app_state: Arc<AppState>) -> Router {
         .route("/token-info/{token_id}", routing::get(token_info_))
         .route("/test-token", routing::get(test_token))
 
-        .route("/state", routing::get(state))
-
         .route("/order", routing::post(order))
         .route("/task/{order_hash}", routing::get(task).post(task))
         .route("/task-ws/{order_hash}", routing::any(task_ws))
@@ -102,11 +93,15 @@ pub fn api(app_state: Arc<AppState>) -> Router {
 
         .with_state(app_state)
 
+        .route("/admin", routing::get(admin))
         .route("/config", routing::get(config))
         .route("/markets", routing::get(markets))
-        //.route("/openapi.json", routing::get(openapi))
         .route("/ping", routing::get(ping))
         .route("/myip", routing::get(myip))
+
+        .layer(
+            middleware::from_fn(log_middleware)
+        )
 
         .fallback(api_fallback)
 }
@@ -142,6 +137,10 @@ static TEST_TOKEN: Lazy<Token> = Lazy::new(
     }
 );
 
+async fn admin() -> Response {
+    (StatusCode::OK, Html(ADMIN_DOC)).into_response()
+}
+
 async fn ping() -> &'static str {
     "pong"
 }
@@ -152,9 +151,9 @@ async fn myip(
     addr.to_string()
 }
 
-async fn openapi() -> Response {
-    (StatusCode::OK, Json(ApiDoc::openapi())).into_response()
-}
+// async fn openapi() -> Response {
+//     (StatusCode::OK, Json(ApiDoc::openapi())).into_response()
+// }
 
 #[debug_handler]
 async fn create_token(
@@ -231,7 +230,6 @@ async fn token_info(
 
 #[debug_handler]
 async fn token_info_(
-    headers: HeaderMap,
     State(state): State<Arc<AppState>>,
     Path(token_id): Path<String>
 ) -> Result<Response, ApiError> {
@@ -409,11 +407,11 @@ async fn handle_task_ws(
             }
         }
         let _ = timeout(
-            Duration::from_millis(*TASK_WS_SENDING_INTERVAL),
+            Duration::from_millis(100),
             socket.recv()
         ).await;
         sleep(
-            Duration::from_millis(20)
+            Duration::from_millis(*TASK_WS_SENDING_INTERVAL)
         ).await;
     }
 
@@ -423,3 +421,58 @@ async fn handle_task_ws(
 async fn api_fallback() -> Response {
     ApiError::PathNotFound.into_response()
 }
+
+const ADMIN_DOC: &'static str = r#"
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Doc</title>
+</head>
+<body>
+
+<h1>Документация</h1>
+
+<h2>1. POST /create-token/</h2>
+<p>Создает новый токен.</p>
+<ul>
+    <li><strong>Запрос:</strong> Заголовок `Authorization: Bearer <master_token>`, параметры запроса: `ttl`, `op_limit`, `tc_limit`.</li>
+    <li><strong>Ответ:</strong> 201 Created, токен в формате JSON.</li>
+    <li><strong>Ошибки:</strong> 401 Unauthorized, 400 Bad Request.</li>
+</ul>
+
+<h2>2. DELETE /cutout-token/{token_id}</h2>
+<p>Удаляет токен по `token_id`.</p>
+<ul>
+    <li><strong>Запрос:</strong> Заголовок `Authorization: Bearer <master_token>`, параметр пути `token_id`.</li>
+    <li><strong>Ответ:</strong> 200 OK, удалённый токен в формате JSON, 404 Not Found, если токен не существует.</li>
+    <li><strong>Ошибки:</strong> 401 Unauthorized.</li>
+</ul>
+
+<h2>3. POST /update-token/</h2>
+<p>Обновляет параметры токена.</p>
+<ul>
+    <li><strong>Запрос:</strong> Заголовок `Authorization: Bearer <master_token>`, параметры запроса: `id`, `ttl`, `op_limit`, `tc_limit`.</li>
+    <li><strong>Ответ:</strong> 201 Created, обновлённый токен в формате JSON.</li>
+    <li><strong>Ошибки:</strong> 401 Unauthorized, 400 Bad Request.</li>
+</ul>
+
+<h2>Авторизация</h2>
+<p>Все методы требуют заголовка: `Authorization: Bearer <master_token>`.</p>
+
+<h2>Пример запросов</h2>
+<pre>
+POST /create-token/?ttl=3600&op_limit=1000&tc_limit=5000
+Authorization: Bearer your_master_token
+
+DELETE /cutout-token/12345
+Authorization: Bearer your_master_token
+
+POST /update-token/?id=12345&ttl=7200&op_limit=2000&tc_limit=2
+Authorization: Bearer your_master_token
+</pre>
+
+</body>
+</html>
+"#;

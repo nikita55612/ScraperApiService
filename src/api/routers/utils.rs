@@ -1,15 +1,19 @@
 use std::collections::HashMap;
 use reqwest::header;
 use axum::{
+    extract::Request,
+    response::Response,
+    middleware::Next,
     body::Bytes,
     http::HeaderMap
 };
 
 use crate::{
 	api::{
-		app::get_master_token,
+		app::MASTER_TOKEN,
         database as db,
-        error::ApiError
+        error::ApiError,
+        logger
 	},
 	models::api::{
         Order,
@@ -17,6 +21,30 @@ use crate::{
     }
 };
 
+
+pub async fn log_middleware(
+    req: Request,
+    next: Next,
+) -> Response {
+
+    let req_method = req.method().to_string();
+    let req_path = req.uri().to_string();
+
+    let res = next.run(req).await;
+
+    logger::write(
+        log::Level::Info,
+        "API",
+        format!(
+            "{} {} {}",
+            req_method,
+            req_path,
+            res.status()
+        )
+    ).await;
+
+    res
+}
 
 pub fn extract_token_from_headers(headers: &HeaderMap) -> Result<&str, ApiError> {
     let auth_header = headers
@@ -31,7 +59,7 @@ pub fn extract_token_from_headers(headers: &HeaderMap) -> Result<&str, ApiError>
 
 pub fn verify_master_token(headers: &HeaderMap) -> Result<(), ApiError> {
     let master_token = extract_token_from_headers(headers)?;
-    if master_token != get_master_token() {
+    if master_token != &*MASTER_TOKEN {
         return Err(ApiError::InvalidMasterToken);
     }
 
