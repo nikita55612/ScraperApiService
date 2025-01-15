@@ -1,4 +1,3 @@
-#![allow(warnings)]
 use std::collections::HashMap;
 use once_cell::sync::Lazy;
 use utoipa::ToSchema;
@@ -6,17 +5,16 @@ use serde::{
     Deserialize,
     Serialize
 };
-use rand::Rng;
+// use rand::Rng;
 
-use super::super::{
+use crate::{
     config as cfg,
     scraper::error::ScraperError,
-    utils::{
-        select_random_product_name,
-        select_random_vendor,
-        select_random_brand,
-        timestamp_now
-    }
+    // utils::{
+    //     select_random_product_name,
+    //     select_random_vendor,
+    //     select_random_brand
+    // }
 };
 
 
@@ -120,36 +118,36 @@ impl ProductData {
 		Some(self)
 	}
 
-	pub fn rand() -> Self {
-        let mut rng = rand::thread_rng();
+	// pub fn rand() -> Self {
+    //     let mut rng = rand::thread_rng();
 
-        let price = rng.gen_range(200..9000) as u64;
-        let card_price = (price as f64 * rng.gen_range(0.5..0.95)) as u64;
+    //     let price = rng.gen_range(200..9000) as u64;
+    //     let card_price = (price as f64 * rng.gen_range(0.5..0.95)) as u64;
 
-        Self {
-            name: Some(
-				select_random_product_name().into()
-			),
-            price: Some(price),
-            cprice: Some(card_price),
-            seller: Some(
-				select_random_vendor().into()
-			),
-            reviews: Some(
-				rng.gen_range(0..4500) as u64
-			),
-            rating: Some(
-				rng.gen_range(0.0..5.0)
-			),
-			seller_id: Some(
-				rng.gen_range(10000000..999999999).to_string()
-			),
-			brand: Some(
-				select_random_brand().into()
-			),
-            ..Default::default()
-        }
-    }
+    //     Self {
+    //         name: Some(
+	// 			select_random_product_name().into()
+	// 		),
+    //         price: Some(price),
+    //         cprice: Some(card_price),
+    //         seller: Some(
+	// 			select_random_vendor().into()
+	// 		),
+    //         reviews: Some(
+	// 			rng.gen_range(0..4500) as u64
+	// 		),
+    //         rating: Some(
+	// 			rng.gen_range(0.0..5.0)
+	// 		),
+	// 		seller_id: Some(
+	// 			rng.gen_range(10000000..999999999).to_string()
+	// 		),
+	// 		brand: Some(
+	// 			select_random_brand().into()
+	// 		),
+    //         ..Default::default()
+    //     }
+    // }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -242,7 +240,6 @@ impl Product {
                 )
             },
             Symbol::MM => format!("https://megamarket.ru/promo-page/details/#?slug={}", self.id),
-            _ => self.url.clone(),
         }
     }
 }

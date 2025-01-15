@@ -1,8 +1,4 @@
-#![allow(warnings)]
-use once_cell::sync::{
-	OnceCell,
-	Lazy
-};
+use once_cell::sync::OnceCell;
 use std::{
 	collections::HashMap,
 	net::IpAddr
@@ -100,9 +96,7 @@ pub enum InvalidProxy {
     #[error("IP address: '{0}'.")]
     InvalidProxyIp(String),
     #[error("port number: '{0}'.")]
-    InvalidProxyPort(String),
-	#[error("symbol: '{0}'.")]
-    InvalidProxySymbol(String),
+    InvalidProxyPort(String)
 }
 
 #[derive(Debug, Error)]
@@ -253,11 +247,11 @@ fn product_str_validation(s: &str) -> Result<String, InvalidProduct> {
 
 #[cfg(test)]
 mod tests {
-    //Запуск ssh сервера
-    //ssh -R 5500:localhost:5500 -N -f -o "ServerAliveInterval 60" -o "ServerAliveCountMax 3" server
+    // Запуск ssh сервера
+    // ssh -R 5500:localhost:5500 -N -f -o "ServerAliveInterval 60" -o "ServerAliveCountMax 3" server
     use super::*;
-    use tokio::time::sleep;
-    use std::{collections::HashMap, net::SocketAddr, time::Duration};
+    // use tokio::time::sleep;
+    use std::collections::HashMap;
 
 	#[test]
     fn test_parse_url() {

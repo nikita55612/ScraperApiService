@@ -1,4 +1,3 @@
-#![allow(warnings)]
 use indexmap::IndexMap;
 use utoipa::ToSchema;
 use serde::{
@@ -6,17 +5,14 @@ use serde::{
     Deserialize
 };
 
-use super::{
-    validation::Validation,
-    super::{
-        models::scraper::ProductData,
-        api::error::ApiError,
-        utils::{
-            remove_duplicates,
-            create_token_id,
-            timestamp_now,
-            sha1_hash
-        }
+use crate::{
+    models::scraper::ProductData,
+    api::error::ApiError,
+    utils::{
+        remove_duplicates,
+        create_token_id,
+        timestamp_now,
+        sha1_hash
     }
 };
 
@@ -56,7 +52,7 @@ impl Token {
     }
 
     pub fn is_expired(&self) -> bool {
-        (self.created_at + self.ttl) - timestamp_now() < 0
+        ((self.created_at + self.ttl) as i64 - timestamp_now() as i64) < 0
     }
 }
 
