@@ -1,4 +1,3 @@
-#![allow(warnings)]
 use std::{
     collections::HashMap,
     path::Path
@@ -7,7 +6,6 @@ use once_cell::sync::OnceCell;
 use utoipa::ToSchema;
 use serde::{
     Deserialize,
-    Deserializer,
     Serialize
 };
 use super::utils::{
@@ -18,10 +16,7 @@ use super::utils::{
     remove_all_dirs
 };
 use browser_bridge::{
-    chromiumoxide::{
-        browser::HeadlessMode,
-        handler::frame,
-    },
+    chromiumoxide::browser::HeadlessMode,
     BrowserSessionConfig,
     BrowserTimings,
 };
@@ -71,7 +66,7 @@ pub fn init() {
             std::env::set_var(key, value);
         }
     }
-    mkdir_if_not_exists(
+    let _ = mkdir_if_not_exists(
         &config.browser.users_temp_data_dir
     );
     let _ = remove_all_dirs(&config.browser.users_temp_data_dir);
@@ -82,7 +77,7 @@ pub fn init() {
     if dotenv::dotenv().is_err() {
         log::warn!(".env file not found");
     }
-    if let Err(mt) = std::env::var("MASTER_TOKEN") {
+    if let Err(_) = std::env::var("MASTER_TOKEN") {
         log::error!("Env var MASTER_TOKEN not defined");
         panic!();
     }
@@ -116,6 +111,7 @@ impl Server {
 pub struct Api {
     pub root_api_path: String,
     pub description_file_path: Option<String>,
+    pub log_file_path: Option<String>,
     pub assets_path: String,
     pub db_path: String,
     pub db_max_conn: u32,
@@ -201,6 +197,7 @@ impl Default for Api {
         Self {
             root_api_path: "/api/v1".into(),
             description_file_path: None,
+            log_file_path: None,
             assets_path: "assets".into(),
             db_path: "sqlite:scraper_api.db".into(),
             db_max_conn: 2,
