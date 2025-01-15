@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-
 use once_cell::sync::OnceCell;
 use scraper_dep::Selector;
 

@@ -58,7 +58,7 @@ fn oz_extractor(content: &str) -> Option<ProductData> {
 					)
 				}
 			)
-			.filter(|(k, v)| v.is_some())
+			.filter(|(_, v)| v.is_some())
 			.map(|(k, v)| (k, v.unwrap()))
 			.collect::<HashMap<_, _>>()
 		)?;
