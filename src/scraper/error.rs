@@ -1,4 +1,3 @@
-#![allow(warnings)]
 use browser_bridge::BrowserError;
 use thiserror::Error;
 
@@ -7,10 +6,10 @@ use thiserror::Error;
 pub enum ScraperError {
     #[error("InvalidSymbol")]
     InvalidSymbol,
-    #[error("InvalidProductId")]
-    InvalidProductId,
-    #[error("ParseProductError")]
-    ParseProductError,
+    // #[error("InvalidProductId")]
+    // InvalidProductId,
+    // #[error("ParseProductError")]
+    // ParseProductError,
 }
 
 #[derive(Error, Debug)]

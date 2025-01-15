@@ -1,10 +1,7 @@
-use std::collections::HashMap;
 use once_cell::sync::Lazy;
 use async_stream::stream;
 use browser_bridge::PageParam;
 use tokio_stream::Stream;
-
-use crate::models::scraper::Product;
 
 use super::{
     req::{
@@ -12,13 +9,12 @@ use super::{
         ReqMethod
     },
     super::{
+        api::logger,
         config as cfg,
         models::{
-            scraper::ProductData,
+            scraper::Product,
             api::{
                 Task,
-                TaskProgress,
-                TaskResult,
                 TaskStatus
             }
         }
@@ -63,11 +59,29 @@ pub async fn task_stream(mut task: Task) -> impl Stream<Item = Task> {
     let intpt_check_step = *INTERRUPT_CHECK_STEP;
     task.init_progress();
     let order_data = task.extract_order_data();
+    let req_method = if order_data.products
+        .iter()
+        .find(
+            |p| p.starts_with("oz")
+            || p.starts_with("ym")
+            || p.starts_with("mm")
+        )
+        .is_some() {
+            ReqMethod::Combined
+        } else {
+            ReqMethod::Reqwest
+        };
     let req_session_res = ReqSession::new(
         &cfg::get().req_session,
-        ReqMethod::Combined,
+        req_method,
         &order_data.cookies,
         order_data.proxy_pool
+    ).await;
+    logger::write(
+        if req_session_res.is_ok() {log::Level::Info}
+            else {log::Level::Error},
+        "TASK_STREAM",
+        serde_json::to_string(&task).unwrap_or_default()
     ).await;
 
     let stream = stream! {
@@ -83,7 +97,7 @@ pub async fn task_stream(mut task: Task) -> impl Stream<Item = Task> {
                     let _ = req_session.browser_open_page(
                         &product.get_parse_url(),
                         &PageParam {
-                            duration: 180,
+                            duration: 100,
                             ..Default::default()
                         }
                     ).await;
@@ -120,6 +134,15 @@ pub async fn task_stream(mut task: Task) -> impl Stream<Item = Task> {
                     }
                     yield task.clone();
                 }
+                task.result = None;
+                logger::write(
+                    if !matches!(
+                        task.status, TaskStatus::Error | TaskStatus::Interrupted
+                        ) {log::Level::Info}
+                        else {log::Level::Error},
+                    "TASK_STREAM_END",
+                    serde_json::to_string(&task).unwrap_or_default()
+                ).await;
                 req_session.close().await;
             },
             Err(e) => {
@@ -135,8 +158,6 @@ pub async fn task_stream(mut task: Task) -> impl Stream<Item = Task> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[tokio::test]
     async fn test_task_stream() {
         let products = vec![

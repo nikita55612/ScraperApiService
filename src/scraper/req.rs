@@ -1,6 +1,8 @@
 use once_cell::sync::{Lazy, OnceCell};
 use std::{
-	collections::HashMap, sync::Arc, thread::panicking, time::Duration
+	collections::HashMap,
+	sync::Arc,
+	time::Duration
 };
 use browser_bridge::{
 	chromiumoxide::{
@@ -20,7 +22,7 @@ use tokio::{
 	time::sleep,
 	sync::Mutex
 };
-use reqwest::cookie::{Cookie, Jar};
+use reqwest::cookie::Jar;
 
 use super::{
 	error::ReqSessionError,
@@ -93,7 +95,7 @@ impl BrowserStates {
 
 static BROWSER_STATES: OnceCell<BrowserStates> = OnceCell::new();
 
-pub fn get_browser_states() -> &'static BrowserStates {
+fn get_browser_states() -> &'static BrowserStates {
     BROWSER_STATES.get_or_init(|| {
 		let mut states = Vec::with_capacity(
 			cfg::get().api.handlers_count + 2
@@ -175,6 +177,7 @@ struct Browser {
 	session: BrowserSession
 }
 
+#[allow(dead_code)]
 pub enum ReqMethod {
 	Combined,
 	Browser,
@@ -430,8 +433,8 @@ impl ReqSession {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::time::sleep;
-    use std::time::Duration;
+    // use tokio::time::sleep;
+    // use std::time::Duration;
 
 
     #[tokio::test]
@@ -493,7 +496,7 @@ mod tests {
     async fn test_proxy_pool() {
 		let proxy_pool: Vec<i32> = vec![1];
 		let set_proxy_interval = 8;
-		for req_count in (0..122) {
+		for req_count in 0..122 {
 			if (req_count + 1) % set_proxy_interval == 0 {
 				let index = (req_count / set_proxy_interval) % proxy_pool.len();
 				println!("n[{}] index {} = {}", req_count, index, proxy_pool[index])
