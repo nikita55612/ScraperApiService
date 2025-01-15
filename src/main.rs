@@ -31,9 +31,11 @@ mod api;
 
 async fn init() {
     colog::init();
-    log::info!("{:#?}\n", config::get());
+    let config_ = config::get();
+    log::info!("{:#?}\n", config_);
     config::init();
     println!("{}", config::LOGO);
+    log::info!("\n---- RustScraperApi service is up and running at http://{} ----", config_.server.addr());
 }
 
 #[tokio::main]

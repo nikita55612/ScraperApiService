@@ -114,6 +114,8 @@ impl Server {
 
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 pub struct Api {
+    pub root_api_path: String,
+    pub description_file_path: Option<String>,
     pub assets_path: String,
     pub db_path: String,
     pub db_max_conn: u32,
@@ -197,6 +199,8 @@ impl Default for Server {
 impl Default for Api {
     fn default() -> Self {
         Self {
+            root_api_path: "/api/v1".into(),
+            description_file_path: None,
             assets_path: "assets".into(),
             db_path: "sqlite:scraper_api.db".into(),
             db_max_conn: 2,
