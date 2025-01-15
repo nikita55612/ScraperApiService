@@ -2,7 +2,7 @@ from websockets.sync.client import connect
 import requests
 
 
-TOKEN = "rs.Ma8whFSr5prfQVfHhChnBXIYl"
+TOKEN = "rs.vHGzpkVPfVFao7LG9EiSV86k2"
 MASTER_TOKEN = "1234"
 DOMEN = "http://localhost:5050"
 API_URL = f"{DOMEN}/api/v1"
@@ -57,7 +57,7 @@ def token_info_():
 
 def test_token():
     print("test_token")
-    res = requests.get(f"{API_URL}/test_token")
+    res = requests.get(f"{API_URL}/test-token")
     print(res.text)
 
 def state():
@@ -126,5 +126,5 @@ def order():
 if __name__ == "__main__":
 	import time
 
-	test_token()
+	order()
 	#task_ws(order_hash)

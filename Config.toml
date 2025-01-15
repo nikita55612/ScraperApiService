@@ -1,13 +1,13 @@
 env = [
-    ["MASTER_TOKEN", "1234"],
+    ["MASTER_TOKEN", "1234"]
 ]
 pub_env = [
+    ["PRINT_LOGS", "1"],
     ["VERSION", "v1.0.0"],
     ["LAST_UPDATE", "1/14/25"],
-    ["GITHUB", "-"],
+    ["GITHUB", "https://github.com/Nikita55612/RustScraperApi"],
     ["CONTACT", "https://t.me/Nikita5612"],
-    ["LANG", "Rust"],
-    ["WEB_DEP", "axum==0.7.9"],
+    ["LANG", "Rust"]
 ]
 
 [server]
@@ -16,14 +16,15 @@ port = 5050
 
 [api]
 root_api_path = "/api/v1"
-description_file_path = "assets/API_Description.md"
+description_file_path = "assets/API_DESCRIPTION.md"
+log_file_path = "api.log"
 assets_path = "assets"
 db_path = "sqlite:scraper_api.db"
 db_max_conn = 2
-handlers_count = 1
-handler_queue_limit = 10
-task_ws_sending_interval = 1000
-open_ws_limit = 20
+handlers_count = 3
+handler_queue_limit = 30
+task_ws_sending_interval = 200
+open_ws_limit = 100
 interrupt_check_step = 60
 available_markets = [
     "oz",
@@ -58,14 +59,14 @@ request_timeout = 2000
 cache_enabled = true
 
 [browser.timings]
-launch_sleep = 300
-set_proxy_sleep = 180
+launch_sleep = 240
+set_proxy_sleep = 160
 action_sleep = 80
-page_goto_timeout = 1400
+page_goto_timeout = 1200
 
 [browser.page_param]
 rand_user_agent = false
-wait_for_element_timeout = 1000
+wait_for_element_timeout = 1100
 
 [browser.page_param.symbol]
 oz.wait_for_product_element = "body > pre"
@@ -73,9 +74,9 @@ ym.wait_for_product_element = """div[data-baobab-name="productSnippet"]"""
 mm.wait_for_product_element = """meta[itemprop="price"]"""
 
 [req_session]
-set_proxy_interval = 14
+set_proxy_interval = 16
 close_tabs_interval = 40
-launch_sleep = 200
+launch_sleep = 180
 
 [req_session.timings]
 timeout = 700
