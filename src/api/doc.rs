@@ -1,3 +1,4 @@
+use once_cell::sync::Lazy;
 use serde::Serialize;
 use serde_json::json;
 use utoipa::{
@@ -13,20 +14,28 @@ use utoipa::{
 	OpenApi
 };
 
-use crate::{
-	api::app::ROOT_API_PATH,
-	config::Config,
-	models::{
-		api::{
-			ApiState,
-			Order,
-			Task,
-			Token
-		},
-		scraper::Market
-	}
+use crate::models::api;
+
+use super::{
+    super::{
+        api::app::ROOT_API_PATH,
+        config::{
+            self as cfg,
+            Config,
+        },
+        models::{
+            api::{
+                ApiState,
+                Order,
+                Task,
+                Token
+            },
+            scraper::Market
+        }
+    },
+    error::ApiError,
+    routers
 };
-use super::{error::ApiError, routers};
 
 
 #[derive(Debug, Serialize)]
@@ -40,7 +49,7 @@ impl Modify for ApiToken {
                 SecurityScheme::Http(
                     HttpBuilder::new()
                         .scheme(HttpAuthScheme::Bearer)
-						.description(Some("Token предоставляет доступ к приватным api методам. Пример токена: rs.qWzZgfMjXUhrwgZWn4uZRT9VK"))
+						.description(Some("Token предоставляет доступ к приватным api методам.\nПример токена: rs.qWzZgfMjXUhrwgZWn4uZRT9VK"))
                         .build(),
                 ),
             );
@@ -48,28 +57,53 @@ impl Modify for ApiToken {
     }
 }
 
-const API_DESCRIPTION: &'static str = r#"
-Дата публикации: 1/14/25
+pub static API_DESCRIPTION: Lazy<String> = Lazy::new(|| {
+    if let Some(path) = &cfg::get().api.description_file_path {
+        match std::fs::read_to_string(path) {
+            Ok(content) => content,
+            Err(_) => DEFAULT_API_DESCRIPTION.into()
+        }
+    } else {
+        DEFAULT_API_DESCRIPTION.into()
+    }
+});
 
-# RustScraper API Documentation
+const DEFAULT_API_DESCRIPTION: &'static str = r#"
+Дата публикации: **1/14/25**
+
+# Документация API
+
+[Github page](https://github.com/Nikita55612/RustScraperApi)
+
+---
 
 ## О проекте
 
-RustScraper API - это мощный инструмент для парсинга данных о товарах с популярных маркетплейсов. API разработано на языке Rust, что обеспечивает высокую производительность и надежность работы.
+RustScraper API - это мощный инструмент для парсинга данных о товарах с популярных маркетплейсов. API разработано на языке [Rust](https://ru.wikipedia.org/wiki/Rust_(%D1%8F%D0%B7%D1%8B%D0%BA_%D0%BF%D1%80%D0%BE%D0%B3%D1%80%D0%B0%D0%BC%D0%BC%D0%B8%D1%80%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D1%8F)), что обеспечивает высокую производительность и надежность работы.
+
+Проект разрабатывается и поддерживается одним человеком.
+
+Мой контакт - [@Nikita5612](https://t.me/Nikita5612)
+
+Доступ к сервису выдается на платной основе, подробности в лс.
+
+---
 
 ## Основные возможности
 
 - Поддержка крупнейших маркетплейсов:
-  - Wildberries
-  - Ozon
-  - Яндекс.Маркет
-  - МегаМаркет
+  - [Wildberries](https://www.wildberries.ru/)
+  - [Ozon](https://www.ozon.ru/)
+  - [Яндекс.Маркет](https://market.yandex.ru/)
+  - [МегаМаркет](https://megamarket.ru/)
 - Гибкая система обхода блокировок через прокси-серверы
 - Поддержка пользовательских cookies для сохранения настроек сессии
-- WebSocket подключение для отслеживания статуса парсинга в реальном времени
+- [WebSocket](https://ru.wikipedia.org/wiki/WebSocket) подключение для отслеживания статуса парсинга в реальном времени
 - Простой и понятный REST API интерфейс
 - Детальная валидация входящих данных
 - Система очередей для распределения нагрузки
+
+---
 
 ## Начало работы
 
@@ -87,11 +121,13 @@ RustScraper API - это мощный инструмент для парсинг
 #### Форматы ссылок на товары
 Поддерживается два формата указания товаров:
 1. Короткий формат: `маркет/id`
-   - `wb/145700662` (Wildberries)
-   - `oz/1736756863` (Ozon)
-   - `ym/1732949807-100352880819` (Яндекс.Маркет)
-   - `mm/100065768905` (МегаМаркет)
+   - `wb/145700662` ([Wildberries](https://www.wildberries.ru/))
+   - `oz/1736756863` ([Ozon](https://www.ozon.ru/))
+   - `ym/1732949807-100352880819` ([Яндекс.Маркет](https://market.yandex.ru/))
+   - `mm/100065768905` ([МегаМаркет](https://megamarket.ru/))
 2. Полный URL товара с маркетплейса
+
+---
 
 ### 3. Отправка заказа и получение результатов
 
@@ -99,7 +135,9 @@ RustScraper API - это мощный инструмент для парсинг
 1. Валидация заказа через метод `/valid-order`
 2. Отправка заказа методом `/order`
 3. Получение `order_hash` для отслеживания статуса
-4. Мониторинг выполнения через REST API или WebSocket
+4. Мониторинг выполнения через REST API или [WebSocket](https://ru.wikipedia.org/wiki/WebSocket)
+
+---
 
 ## Особенности работы
 
@@ -124,7 +162,9 @@ API предоставляет два механизма защиты от бл�
 - Лимит на количество товаров в заказе
 - Лимит на количество одновременных обработок
 - Ограничение времени жизни токена (TTL)
-- Лимит на количество WebSocket подключений
+- Лимит на количество [WebSocket](https://ru.wikipedia.org/wiki/WebSocket) подключений
+
+---
 
 ## Мониторинг выполнения
 
@@ -134,6 +174,8 @@ API предоставляет два механизма защиты от бл�
 ### WebSocket мониторинг (рекомендуется)
 Установка постоянного соединения через `/task-ws/{order_hash}` для получения обновлений в реальном времени
 
+---
+
 ## Обработка ошибок
 
 API использует унифицированную систему кодов ошибок. Каждая ошибка содержит:
@@ -142,6 +184,8 @@ API использует унифицированную систему кодо�
 - Информативное сообщение (`message`)
 
 Подробное описание всех возможных ошибок представлено в таблице ApiError.
+
+---
 
 ## ApiError
 
@@ -180,20 +224,20 @@ API использует унифицированную систему кодо�
 #[derive(OpenApi)]
 #[openapi(
     servers(
-        (url = "http://rustscraper", description = "Remote API"),
-        (url = "https://rustscraper", description = "Remote API HTTPS"),
+        (url = "https://rustscraper.ru", description = "Remote API https"),
+        (url = "http://rustscraper.ru", description = "Remote API http"),
         (url = "http://localhost:5050", description = "Local server for testing"),
     ),
     info(
         title = "RustScraperApi",
-        description = API_DESCRIPTION,
+        description = &*API_DESCRIPTION,
         version = "1.0.0",
         contact(name = "Nikita", url = "https://t.me/Nikita5612")
     ),
     tags(
         (name = "order", description = "Методы отправки заказа на парсинг и получения статуса его выполнения"),
         (name = "token", description = "Методы получения информации о токене доступа и создания тестового токена"),
-        (name = "utilities", description = "Утилиты для получения информации о состоянии API")
+        (name = "utilities", description = "Утилиты для получения API информации")
     ),
     modifiers(&ApiToken),
     paths(
@@ -221,7 +265,7 @@ pub struct ApiDoc;
     get,
     path = "/openapi.json",
     tags = ["utilities"],
-    context_path = ROOT_API_PATH,
+    context_path = &*ROOT_API_PATH,
     description = r#"
 ### GET /openapi.json
 Метод для получения openapi.json - это файл, содержащий спецификацию API, написанную в формате OpenAPI. Этот файл описывает, как взаимодействовать с API, включая его конечные точки (endpoints), параметры, схемы данных, методы запросов, ответы и другие детали.
@@ -243,7 +287,7 @@ fn openapi() {}
     get,
     path = "/ping",
     tags = ["utilities"],
-    context_path = ROOT_API_PATH,
+    context_path = &*ROOT_API_PATH,
     description = r#"
 ### GET /ping
 Метод проверки работоспособности сервера. Используется для мониторинга состояния сервера и проверки его доступности.
@@ -259,7 +303,7 @@ fn ping() {}
     get,
     path = "/myip",
     tags = ["utilities"],
-    context_path = ROOT_API_PATH,
+    context_path = &*ROOT_API_PATH,
     description = r#"
 ### GET /myip
 Метод для определения IP-адреса клиента. Возвращает текущий IP-адрес в формате SocketAddr (IP:PORT),
@@ -279,7 +323,7 @@ fn myip() {}
     get,
     path = "/token-info",
     tags = ["token"],
-    context_path = ROOT_API_PATH,
+    context_path = &*ROOT_API_PATH,
     description = r#"
 ### GET /token-info
 
@@ -331,7 +375,7 @@ fn token_info() {}
     get,
     path = "/token-info/{token_id}",
     tags = ["token"],
-    context_path = ROOT_API_PATH,
+    context_path = &*&*ROOT_API_PATH,
     description = r#"
 ### GET /token-info/{token_id}
 
@@ -383,7 +427,7 @@ fn token_info_() {}
     get,
     path = "/test-token",
     tags = ["token"],
-    context_path = ROOT_API_PATH,
+    context_path = &*ROOT_API_PATH,
     description = r#"
 ### GET /test-token
 Метод для получения временного тестового токена доступа к API.
@@ -435,18 +479,10 @@ fn test_token() {}
     get,
     path = "/config",
     tags = ["utilities"],
-    context_path = ROOT_API_PATH,
+    context_path = &*ROOT_API_PATH,
     description = r##"
 ### GET /config
 Метод получения текущей конфигурации API. Возвращает актуальные настройки и параметры работы API-сервера.
-
-```python
-import requests
-
-response = requests.get("http://domain/api/v1/config")
-config_data = response.json()
-print(config_data)  # Конфигурация API
-```
 "##,
     responses(
         (status = 200, description = "Конфигурация API", body = Config, content_type = "application/json")
@@ -458,7 +494,7 @@ fn config() {}
     get,
     path = "/state",
     tags = ["utilities"],
-    context_path = ROOT_API_PATH,
+    context_path = &*ROOT_API_PATH,
     description = r#"
 ### GET /state
 Метод получения текущего состояния API-сервера. Возвращает информацию о:
@@ -467,14 +503,6 @@ fn config() {}
 - Текущем количестве задач в очереди
 - Лимите открытых WebSocket соединений
 - Текущем количестве открытых WebSocket соединений
-
-```python
-import requests
-
-response = requests.get("http://domain/api/v1/state")
-state_data = response.json()
-print(state_data)  # Состояние API
-```
 "#,
     responses(
         (status = 200, description = "Состояние API", body = ApiState, content_type = "application/json")
@@ -490,19 +518,11 @@ fn state() {}
     get,
     path = "/markets",
     tags = ["utilities"],
-    context_path = ROOT_API_PATH,
+    context_path = &*ROOT_API_PATH,
     description = r#"
 ### GET /markets
 Метод получения информации о доступных маркетплейсах в системе.
 Возвращает список поддерживаемых маркетплейсов и их параметров в формате JSON.
-
-```python
-import requests
-
-response = requests.get("http://domain/api/v1/markets")
-markets_data = response.json()
-print(markets_data)  # Список доступных маркетплейсов
-```
 "#,
     responses(
         (status = 200, description = "Доступные маркетплейсы", body = HashMap<String, Market>, content_type = "application/json",
@@ -527,7 +547,7 @@ fn markets() {}
     post,
     path = "/order",
     tags = ["order"],
-    context_path = ROOT_API_PATH,
+    context_path = &*ROOT_API_PATH,
     description = r#"
 ### POST /order
 Метод создания нового заказа в системе.
@@ -628,7 +648,7 @@ fn order() {}
     post,
     path = "/valid-order",
     tags = ["order"],
-    context_path = ROOT_API_PATH,
+    context_path = &*ROOT_API_PATH,
     description = r#"
 ### GET POST /valid-order
 Метод валидации данных заказа перед его отправкой.
@@ -719,7 +739,7 @@ fn valid_order() {}
     get,
     path = "/task/{order_hash}",
     tags = ["order"],
-    context_path = ROOT_API_PATH,
+    context_path = &*ROOT_API_PATH,
     description = r#"
 ### GET /task/{order_hash}
 Метод получения информации о состоянии задачи по её order_hash.
@@ -783,7 +803,7 @@ fn task() {}
     get,
     path = "/task-ws/{order_hash}",
     tags = ["order"],
-    context_path = ROOT_API_PATH,
+    context_path = &*ROOT_API_PATH,
     description = r#"
 ### ANY /task-ws/{order_hash}
 Метод установки WebSocket-соединения для получения обновлений о состоянии задачи в реальном времени.

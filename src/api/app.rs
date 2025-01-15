@@ -8,7 +8,7 @@ use axum::{
     routing,
     Router
 };
-use once_cell::sync::OnceCell;
+use once_cell::sync::Lazy;
 use tower_http::services::ServeFile;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -20,19 +20,17 @@ use super::doc::ApiDoc;
 use super::routers;
 
 
-pub const ROOT_API_PATH: &'static str = "/api/v1";
 const DEFAULT_MASTER_TOKEN: &'static str = "ARk9dD6EjWRylJ4i2cPbW3sOjw7TTY529sIDiRSpXmAEiRdJ5IKjaOfcRLAXM7Q6p5LJsYsaUyCVmJhZ6q0jXGK0Yd1r2WI1wLEB0AJcTqqj6g7FBcOY06q8kfXzcsrM";
-static MASTER_TOKEN: OnceCell<String> = OnceCell::new();
-
-pub fn get_master_token() -> &'static str {
-    MASTER_TOKEN.get_or_init(|| {
-        dotenv::dotenv().ok();
+pub static MASTER_TOKEN: Lazy<String> = Lazy::new(|| {
+    dotenv::dotenv().ok();
         std::env::var("MASTER_TOKEN")
             .unwrap_or(
                 DEFAULT_MASTER_TOKEN.into()
             )
-    })
-}
+});
+pub static ROOT_API_PATH: Lazy<String> = Lazy::new(|| {
+    cfg::get().api.root_api_path.clone()
+});
 
 pub async fn init() -> (tokio::net::TcpListener, Router) {
     let config = cfg::get();
@@ -52,9 +50,12 @@ pub async fn init() -> (tokio::net::TcpListener, Router) {
         ).await
     );
     let app = Router::new()
-        .nest(ROOT_API_PATH, routers::api(app_state))
+        .nest(&*ROOT_API_PATH, routers::api(app_state))
         .merge(SwaggerUi::new("/swagger-ui")
-            .url("/api/v1/openapi.json", ApiDoc::openapi())
+            .url(
+                format!("{}/openapi.json", &*ROOT_API_PATH),
+                ApiDoc::openapi()
+            )
         )
         .merge(routers::assets())
         .route_service(
@@ -129,7 +130,7 @@ mod tests {
             )
             .header(
                 "Authorization",
-                format!("Bearer {}", get_master_token())
+                format!("Bearer {}", *MASTER_TOKEN)
             )
             .send()
             .await
@@ -158,7 +159,7 @@ mod tests {
             )
             .header(
                 "Authorization",
-                format!("Bearer {}", get_master_token())
+                format!("Bearer {}", *MASTER_TOKEN)
             )
             .send()
             .await
