@@ -134,36 +134,49 @@ pub fn get_product_page_param(symbol: &str) -> &'static PageParam {
 		let cfg_page_param = &cfg::get()
 			.browser
 			.page_param;
-		let wait_el_timeout = cfg_page_param.wait_for_element_timeout;
-		let wait_for_element = |s: &str| {
+		let wait_el_timeout = cfg_page_param.wait_for_el_timeout;
+		let wait_for_el = |s: &str| {
 			cfg_page_param
 				.symbol
 				.get(s)
 				.and_then(|v|
-					v.wait_for_product_element
+					v.wait_for_el
 						.as_ref()
 						.map(|v| (v.as_str(), wait_el_timeout))
+				)
+		};
+		let wait_for_el_until = |s: &str| {
+			cfg_page_param
+				.symbol
+				.get(s)
+				.and_then(|v|
+					v.wait_for_el_until
+						.as_ref()
+						.map(|v| (v.0.as_str(), v.1.as_str(), wait_el_timeout))
 				)
 		};
 		HashMap::from([
 				(
 					Symbol::OZ.as_str().into(),
 					PageParam {
-						wait_for_element: wait_for_element(Symbol::OZ.as_str()),
+						wait_for_el: wait_for_el(Symbol::OZ.as_str()),
+						wait_for_el_until: wait_for_el_until(Symbol::OZ.as_str()),
 						..Default::default()
 					}
 				),
 				(
 					Symbol::YM.as_str().into(),
 					PageParam {
-						wait_for_element: wait_for_element(Symbol::YM.as_str()),
+						wait_for_el: wait_for_el(Symbol::YM.as_str()),
+						wait_for_el_until: wait_for_el_until(Symbol::YM.as_str()),
 						..Default::default()
 					}
 				),
 				(
 					Symbol::MM.as_str().into(),
 					PageParam {
-						wait_for_element: wait_for_element(Symbol::MM.as_str()),
+						wait_for_el: wait_for_el(Symbol::MM.as_str()),
+						wait_for_el_until: wait_for_el_until(Symbol::MM.as_str()),
 						..Default::default()
 					}
 				)
@@ -290,14 +303,19 @@ impl ReqSession {
 								_ => Some(BrowserCookieSameSite::None)
 							}
 						},
-						..BrowserCookieParam::builder().build().unwrap()
+						expires: None,
+						priority: None,
+						same_party: None,
+						source_scheme: None,
+						source_port: None,
+						partition_key: None
 					}
 				})
 				.collect::<Vec<_>>();
 
 			let _ = browser.session.clear_data().await;
-			let _ = browser.session.reset_proxy().await;
 			let _ = browser.session.browser.clear_cookies().await;
+			let _ = browser.session.reset_proxy().await;
 			let _ = browser.session.browser.set_cookies(browser_cookies).await;
 			if !proxy_pool.is_empty() {
 				let _ = browser.session.set_proxy(&proxy_pool[0]).await;

@@ -1,6 +1,5 @@
 use once_cell::sync::Lazy;
 use async_stream::stream;
-use browser_bridge::PageParam;
 use tokio_stream::Stream;
 
 use super::{
@@ -94,13 +93,9 @@ pub async fn task_stream(mut task: Task) -> impl Stream<Item = Task> {
                     .find(|p| p.starts_with("oz"))
                 {
                     let product = Product::from_string_without_valid(p);
-                    let _ = req_session.browser_open_page(
-                        &product.get_parse_url(),
-                        &PageParam {
-                            duration: 100,
-                            ..Default::default()
-                        }
-                    ).await;
+                    let _ = req_session
+                        .req_product_data(&product)
+                        .await;
                 }
                 while !task.is_done_by_status() {
                     let step = task.get_curr_step();
