@@ -62,16 +62,25 @@ cache_enabled = true
 launch_sleep = 240
 set_proxy_sleep = 160
 action_sleep = 80
-page_goto_timeout = 1200
+page_goto_timeout = 450
 
 [browser.page_param]
 rand_user_agent = false
-wait_for_element_timeout = 1100
+wait_for_el_timeout = 7500
 
 [browser.page_param.symbol]
-oz.wait_for_product_element = "body > pre"
-ym.wait_for_product_element = """div[data-baobab-name="productSnippet"]"""
-mm.wait_for_product_element = """meta[itemprop="price"]"""
+oz.wait_for_el_until = [
+    "body > pre",
+    """div img.im[alt="warning"]"""
+]
+ym.wait_for_el_until = [
+    """div[data-baobab-name="productSnippet"]""",
+    """div.CheckboxCaptcha[data-testid="checkbox-captcha"]"""
+]
+mm.wait_for_el_until = [
+    """meta[itemprop="price"]""",
+    """div.captcha-root[id="captcha_root"]"""
+]
 
 [req_session]
 set_proxy_interval = 16
