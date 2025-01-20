@@ -173,14 +173,15 @@ pub struct TestToken {
 #[derive(Deserialize, Serialize, Default, Debug, Clone, ToSchema)]
 pub struct BrowserPageParam {
     pub rand_user_agent: bool,
-    pub wait_for_element_timeout: u64,
+    pub wait_for_el_timeout: u64,
     #[serde(default)]
     pub symbol: HashMap<String, SymbolPageParam>
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, ToSchema)]
 pub struct SymbolPageParam {
-    pub wait_for_product_element: Option<String>
+    pub wait_for_el: Option<String>,
+    pub wait_for_el_until: Option<(String, String)>,
 }
 
 impl Default for Server {
