@@ -249,15 +249,26 @@ async fn token_info_(
 
 #[debug_handler]
 async fn test_token(
+    headers: HeaderMap,
     State(state): State<Arc<AppState>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>
 ) -> Result<Response, ApiError> {
 
+    let real_ip = match headers.get("x-real-ip") {
+        Some(v) => {
+            match v.to_str() {
+                Ok(v) => v.to_string(),
+                Err(_) => addr.ip().to_string()
+            }
+        },
+        None => addr.ip().to_string()
+    };
     let mut cache_lock = state.cache.lock().await;
-    if !cache_lock.blocked_addrs.insert(addr.to_string()) {
-        return Err (ApiError::AccessRestricted);
+    if !cache_lock.blocked_addrs.insert(real_ip) {
+        return Err(ApiError::AccessRestricted);
     }
-    let test_token = TEST_TOKEN.clone();
+    let mut test_token = TEST_TOKEN.clone();
+    test_token.id = Token::new(0, 0, 0).id;
     db::insert_token(&state.db_pool, &test_token).await?;
 
 	Ok ((StatusCode::CREATED, Json(test_token)).into_response())
@@ -302,7 +313,7 @@ async fn order(
     if order.products.len() > token.op_limit as usize {
         return Err(ApiError::ProductLimitExceeded(token.op_limit));
     }
-    if state.task_count_by_token_id(token_id).await > token.tc_limit as usize {
+    if state.task_count_by_token_id(token_id).await >= token.tc_limit as usize {
         return Err(ApiError::ConcurrencyLimitExceeded(token.tc_limit));
     }
     order.validation()?;
