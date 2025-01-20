@@ -62,7 +62,8 @@ impl Default for BrowserTimings {
 #[derive(Clone, Debug)]
 pub struct PageParam<'a> {
     pub proxy: Option<&'a str>,
-    pub wait_for_element: Option<(&'a str, u64)>,
+    pub wait_for_el: Option<(&'a str, u64)>,
+    pub wait_for_el_until: Option<(&'a str, &'a str, u64)>,
     pub user_agent: Option<&'a str>,
     pub cookies: Vec<CookieParam>,
     //pub geolocation: Option<(f64, f64)>,
@@ -75,7 +76,8 @@ impl<'a> Default for PageParam<'a> {
     fn default() -> Self {
         Self {
             proxy: None,
-            wait_for_element: None,
+            wait_for_el: None,
+            wait_for_el_until: None,
             user_agent: None,
             cookies: Vec::new(),
             //geolocation: None,
@@ -290,9 +292,14 @@ impl BrowserSession {
         sleep(
             Duration::from_millis(param.duration)
         ).await;
-        if let Some((selector, timeout)) = param.wait_for_element {
-            let _ = page.wait_for_element_with_timeout(
+        if let Some((selector, timeout)) = param.wait_for_el {
+            let _ = page.wait_for_el_with_timeout(
                 selector, timeout
+            ).await;
+        }
+        if let Some((selector, until_selector, timeout)) = param.wait_for_el_until {
+            let _ = page.wait_for_el_until_with_timeout(
+                selector, until_selector, timeout
             ).await;
         }
 
@@ -376,13 +383,17 @@ impl BrowserSession {
 pub trait Wait {
     const WAIT_SLEEP: u64 = 10;
 
-    async fn wait_for_element(&self, selector: &str);
+    async fn wait_for_el(&self, selector: &str);
 
-    async fn wait_for_element_with_timeout(&self, selector: &str, t: u64) -> Result<(), BrowserError>;
+    async fn wait_for_el_until(&self, selector: &str, until_selector: &str);
+
+    async fn wait_for_el_with_timeout(&self, selector: &str, t: u64) -> Result<(), BrowserError>;
+
+    async fn wait_for_el_until_with_timeout(&self, selector: &str, until_selector: &str, t: u64) -> Result<(), BrowserError>;
 }
 
 impl Wait for Page {
-    async fn wait_for_element(&self, selector: &str) {
+    async fn wait_for_el(&self, selector: &str) {
         while self.find_element(selector).await.is_err() {
             sleep(
                 Duration::from_millis(Self::WAIT_SLEEP)
@@ -390,12 +401,37 @@ impl Wait for Page {
         }
     }
 
-    async fn wait_for_element_with_timeout(
+    async fn wait_for_el_until(&self, selector: &str, until_selector: &str) {
+        while self.find_element(selector).await.is_err() {
+            sleep(
+                Duration::from_millis(Self::WAIT_SLEEP)
+            ).await;
+            if self.find_element(until_selector).await.is_ok() {
+                break;
+            }
+            sleep(
+                Duration::from_millis(Self::WAIT_SLEEP)
+            ).await;
+        }
+    }
+
+    async fn wait_for_el_with_timeout(
         &self, selector: &str, t: u64
     ) -> Result<(), BrowserError> {
         timeout(
             Duration::from_millis(t),
-            self.wait_for_element(selector)
+            self.wait_for_el(selector)
+        ).await?;
+
+        Ok(())
+    }
+
+    async fn wait_for_el_until_with_timeout(
+        &self, selector: &str, until_selector: &str, t: u64
+    ) -> Result<(), BrowserError> {
+        timeout(
+            Duration::from_millis(t),
+            self.wait_for_el_until(selector, until_selector)
         ).await?;
 
         Ok(())
