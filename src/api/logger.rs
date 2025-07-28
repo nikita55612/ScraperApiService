@@ -1,41 +1,47 @@
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
+
+use chrono::{DateTime, Utc};
 use tokio::sync::OnceCell;
 use tokio::{
     fs::OpenOptions,
     io::AsyncWriteExt,
     sync::mpsc::{self, Sender},
 };
-use chrono::{
-    DateTime,
-    Utc
-};
 
 use crate::config as cfg;
 
-
-static PRINT_LOGS: Lazy<bool> = Lazy::new(|| {
-    match std::env::var("PRINT_LOGS") {
-        Ok(v) => if v == "0" {false} else {true},
-        Err(_) => true
+static PRINT_LOGS: LazyLock<bool> = LazyLock::new(|| match std::env::var("PRINT_LOGS") {
+    Ok(v) => {
+        if v == "0" {
+            false
+        } else {
+            true
+        }
     }
+    Err(_) => true,
 });
 
 static LOGGER: OnceCell<Option<LoggerManagenr>> = OnceCell::const_new();
 
 pub async fn init() {
-	if let Some(logger) = LOGGER.get_or_init(|| async {
-        if let Some(log_file) = &cfg::get().api.log_file_path {
-            Some(LoggerManagenr::new(log_file).await)
-        } else {
-            None
-        }
-	}).await {
-        logger.log(LogMessage {
-            timestamp: Utc::now(),
-            level: log::Level::Trace,
-            from: "LAUNCH".into(),
-            message: serde_json::to_string(&cfg::get()).unwrap_or_default(),
-        }).await;
+    if let Some(logger) = LOGGER
+        .get_or_init(|| async {
+            if let Some(log_file) = &cfg::get().api.log_file_path {
+                Some(LoggerManagenr::new(log_file).await)
+            } else {
+                None
+            }
+        })
+        .await
+    {
+        logger
+            .log(LogMessage {
+                timestamp: Utc::now(),
+                level: log::Level::Trace,
+                from: "LAUNCH".into(),
+                message: serde_json::to_string(&cfg::get()).unwrap_or_default(),
+            })
+            .await;
     }
 }
 
@@ -44,12 +50,14 @@ pub async fn write(level: log::Level, from: &str, message: String) {
         log::log!(level, "[{}]: {}", from, message);
     }
     if let Some(Some(logger)) = LOGGER.get() {
-        logger.log(LogMessage {
-            timestamp: Utc::now(),
-            level,
-            from: from.into(),
-            message,
-        }).await;
+        logger
+            .log(LogMessage {
+                timestamp: Utc::now(),
+                level,
+                from: from.into(),
+                message,
+            })
+            .await;
     }
 }
 
@@ -67,8 +75,7 @@ struct LoggerManagenr {
 
 impl LoggerManagenr {
     async fn new(log_file: &str) -> Self {
-        let (sender,
-            mut receiver) = mpsc::channel::<LogMessage>(1024);
+        let (sender, mut receiver) = mpsc::channel::<LogMessage>(1024);
 
         let file = OpenOptions::new()
             .create(true)
@@ -83,10 +90,7 @@ impl LoggerManagenr {
             while let Some(log) = receiver.recv().await {
                 let log_entry = format!(
                     "[{:?}] [{}] [{}]: {}\n",
-                    log.timestamp,
-                    log.level,
-                    log.from,
-                    log.message
+                    log.timestamp, log.level, log.from, log.message
                 );
 
                 if let Err(e) = file.write_all(log_entry.as_bytes()).await {

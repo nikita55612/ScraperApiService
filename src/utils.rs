@@ -1,25 +1,21 @@
-use std::{
-    collections::HashSet, ffi::OsString, io::Write, net::TcpListener, path::Path
-};
 use chrono::Local as LocalTime;
 use rand::{
     distributions::Alphanumeric,
     // seq::SliceRandom,
     thread_rng,
-    Rng
+    Rng,
 };
-use sha1::{
-    Digest,
-    Sha1,
-};
+use sha1::{Digest, Sha1};
+use std::{collections::HashSet, ffi::OsString, io::Write, net::TcpListener, path::Path};
 
 use crate::config as cfg;
 
-
+#[inline]
 pub fn mkdir_if_not_exists<T: AsRef<Path>>(path: T) -> std::io::Result<()> {
     std::fs::create_dir_all(path)
 }
 
+#[inline]
 pub fn write_to_file<P: AsRef<Path>>(file_path: P, content: &[u8]) -> std::io::Result<()> {
     let mut file = std::fs::OpenOptions::new()
         .write(true)
@@ -34,20 +30,18 @@ pub fn print_logo() {
 }
 
 pub fn is_port_open(port: u16) -> bool {
-    TcpListener::bind(
-        (cfg::get().server.host.as_str(), port)
-    ).is_ok()
+    TcpListener::bind((cfg::get().server.host.as_str(), port)).is_ok()
 }
 
+#[inline]
 pub fn timestamp_now() -> u64 {
     LocalTime::now().timestamp() as u64
 }
 
+#[inline]
 pub fn random_string(len: usize) -> String {
     let mut rng = thread_rng();
-    (0..len)
-        .map(|_| rng.sample(Alphanumeric) as char)
-        .collect()
+    (0..len).map(|_| rng.sample(Alphanumeric) as char).collect()
 }
 
 // pub fn create_uuid() -> String {
@@ -55,10 +49,12 @@ pub fn random_string(len: usize) -> String {
 //         .to_string()
 // }
 
+#[inline]
 pub fn create_token_id() -> String {
     format!("rs.{}", random_string(25))
 }
 
+#[inline]
 pub fn sha1_hash(data: &[u8]) -> String {
     let mut hasher = Sha1::new();
     hasher.update(data);
@@ -66,20 +62,21 @@ pub fn sha1_hash(data: &[u8]) -> String {
     hex::encode(res)
 }
 
+#[inline]
 pub fn read_file<T: AsRef<Path>>(path: T) -> std::io::Result<String> {
     std::fs::read_to_string(path)
 }
 
+#[inline]
 pub fn list_dir<T: AsRef<Path>>(dir: T) -> std::io::Result<Vec<OsString>> {
-    Ok(
-        std::fs::read_dir(dir)?
-            .filter_map(|entry| entry.ok())
-            .filter(|entry| entry.path().is_file())
-            .map(|v| v.file_name())
-            .collect::<Vec<_>>()
-    )
+    Ok(std::fs::read_dir(dir)?
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.path().is_file())
+        .map(|v| v.file_name())
+        .collect::<Vec<_>>())
 }
 
+#[inline]
 pub fn remove_all_dirs<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
     for entry in std::fs::read_dir(path)? {
         let entry = entry?;
@@ -92,8 +89,11 @@ pub fn remove_all_dirs<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
     Ok(())
 }
 
+#[inline]
 pub fn remove_duplicates<T>(l: &mut Vec<T>)
-where T: Eq + std::hash::Hash + Clone {
+where
+    T: Eq + std::hash::Hash + Clone,
+{
     let mut seen = HashSet::new();
     l.retain(|i| seen.insert(i.clone()));
 }
@@ -234,9 +234,7 @@ mod tests {
 
     #[test]
     fn test_mkdir() {
-        let path = Path::new(
-            &cfg::get().browser.users_temp_data_dir
-        );
+        let path = Path::new(&cfg::get().browser.users_temp_data_dir);
         mkdir_if_not_exists(path).unwrap();
         assert_eq!(true, true);
     }
@@ -255,17 +253,7 @@ mod tests {
     #[test]
     fn test_remove_list_dub() {
         let mut list = vec![
-            "123",
-            "123",
-            "123",
-            "123",
-            "123",
-            "123",
-            "1235",
-            "1234",
-            "1233",
-            "1232",
-            "1231",
+            "123", "123", "123", "123", "123", "123", "1235", "1234", "1233", "1232", "1231",
         ];
         println!("{:?}", list);
         let mut seen = HashSet::new();

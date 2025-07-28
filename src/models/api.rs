@@ -1,21 +1,12 @@
 use indexmap::IndexMap;
+use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
-use serde::{
-    Serialize,
-    Deserialize
-};
 
 use crate::{
-    models::scraper::ProductData,
     api::error::ApiError,
-    utils::{
-        remove_duplicates,
-        create_token_id,
-        timestamp_now,
-        sha1_hash
-    }
+    models::scraper::ProductData,
+    utils::{create_token_id, remove_duplicates, sha1_hash, timestamp_now},
 };
-
 
 type OrderHash = String;
 
@@ -24,30 +15,30 @@ type OrderHash = String;
 pub struct Token {
     pub id: String,
 
-	#[serde(rename="createdAt")]
+    #[serde(rename = "createdAt")]
     /// Дата и время создания токена в timestamp
     pub created_at: u64,
 
     /// Время жизни токена в секундах
     pub ttl: u64,
 
-    #[serde(rename="orderProductsLimit")]
+    #[serde(rename = "orderProductsLimit")]
     /// Лимит токена на количество товаров в заказе
     pub op_limit: u64,
 
-    #[serde(rename="taskCountLimit")]
+    #[serde(rename = "taskCountLimit")]
     /// Лимит токена на количество параллельных обработок заказа
-    pub tc_limit: u64
+    pub tc_limit: u64,
 }
 
 impl Token {
-    pub fn new(ttl: u64, op_limit: u64, tc_limit: u64) -> Self  {
+    pub fn new(ttl: u64, op_limit: u64, tc_limit: u64) -> Self {
         Self {
             id: create_token_id(),
             created_at: timestamp_now(),
             ttl,
             op_limit,
-            tc_limit
+            tc_limit,
         }
     }
 
@@ -57,52 +48,46 @@ impl Token {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, ToSchema)]
-#[serde(rename_all="lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum TaskStatus {
     Waiting,
     Processing,
     Completed,
     Interrupted,
-    Error
+    Error,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all="lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum TaskResult {
     Data(IndexMap<String, Option<ProductData>>),
-    Error(serde_json::Value)
+    Error(serde_json::Value),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, ToSchema)]
 #[serde(default)]
 pub struct Order {
-	#[serde(skip)]
+    #[serde(skip)]
     #[schema(ignore)]
     pub token_id: String,
 
     pub products: Vec<String>,
 
-	#[serde(rename="proxyPool")]
+    #[serde(rename = "proxyPool")]
     pub proxy_pool: Vec<String>,
 
     //#[serde(rename="proxyMap")]
     //pub proxy_map: HashMap<String, Vec<String>>,
-	pub cookies: Vec<OrderCookieParam>,
+    pub cookies: Vec<OrderCookieParam>,
 }
 
 impl Order {
     fn sha1_hash(&self) -> OrderHash {
         let mut sort_data = self.products.clone();
         sort_data.sort();
-        let order_hash_data = format!(
-            "{}.{}",
-            self.token_id,
-            sort_data.join(",")
-        );
+        let order_hash_data = format!("{}.{}", self.token_id, sort_data.join(","));
 
-        sha1_hash(
-            order_hash_data.as_bytes()
-        )
+        sha1_hash(order_hash_data.as_bytes())
     }
 
     pub fn remove_duplicates(&mut self) {
@@ -129,15 +114,14 @@ pub struct OrderCookieParam {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
 
-    #[serde(rename="httpOnly", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "httpOnly", skip_serializing_if = "Option::is_none")]
     pub http_only: Option<bool>,
 
-    #[serde(rename="sameSite", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "sameSite", skip_serializing_if = "Option::is_none")]
     pub same_site: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub secure: Option<bool>
-
+    pub secure: Option<bool>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -145,7 +129,7 @@ pub struct OrderExtractData {
     pub products: Vec<String>,
     pub proxy_pool: Vec<String>,
     //pub proxy_map: HashMap<String, Vec<String>>,
-	pub cookies: Vec<OrderCookieParam>,
+    pub cookies: Vec<OrderCookieParam>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, ToSchema)]
@@ -156,7 +140,7 @@ pub struct Task {
     #[serde(skip)]
     pub order_hash: OrderHash,
 
-    #[serde(rename="queueNum")]
+    #[serde(rename = "queueNum")]
     pub queue_num: u64,
 
     pub status: TaskStatus,
@@ -168,17 +152,17 @@ pub struct Task {
     #[schema(schema_with = serde_json::Value::default)]
     pub result: Option<TaskResult>,
 
-    #[serde(rename="createdAt")]
+    #[serde(rename = "createdAt")]
     pub created_at: u64,
 }
 
 impl PartialEq for Task {
     fn eq(&self, other: &Self) -> bool {
-        self.order_hash == other.order_hash &&
-        self.queue_num == other.queue_num &&
-        self.status == other.status &&
-        self.progress == other.progress &&
-        self.queue_num == other.queue_num
+        self.order_hash == other.order_hash
+            && self.queue_num == other.queue_num
+            && self.status == other.status
+            && self.progress == other.progress
+            && self.queue_num == other.queue_num
     }
 }
 
@@ -187,7 +171,7 @@ pub struct TaskProgress(u64, u64);
 
 impl TaskProgress {
     pub fn new(done: u64, total: u64) -> Self {
-        Self (done, total)
+        Self(done, total)
     }
 
     pub fn next_step(&mut self) {
@@ -212,9 +196,7 @@ impl Task {
     pub fn is_done_by_status(&self) -> bool {
         matches!(
             self.status,
-            TaskStatus::Completed
-            | TaskStatus::Error
-            | TaskStatus::Interrupted
+            TaskStatus::Completed | TaskStatus::Error | TaskStatus::Interrupted
         )
     }
 
@@ -223,17 +205,11 @@ impl Task {
     }
 
     pub fn init_result_data(&mut self) {
-        self.result = Some(
-            TaskResult::Data(
-                IndexMap::new()
-            )
-        )
+        self.result = Some(TaskResult::Data(IndexMap::new()))
     }
 
     pub fn set_result_error(&mut self, error: ApiError) {
-        self.result = Some(
-            TaskResult::Error(error.to_json())
-        )
+        self.result = Some(TaskResult::Error(error.to_json()))
     }
 
     pub fn extract_order_data(&mut self) -> OrderExtractData {
@@ -248,9 +224,7 @@ impl Task {
     }
 
     pub fn extract_result_data(&mut self) -> Option<&IndexMap<String, Option<ProductData>>> {
-        if let Some(
-            TaskResult::Data(ref_data)
-        ) = &self.result {
+        if let Some(TaskResult::Data(ref_data)) = &self.result {
             return Some(ref_data);
         }
 
@@ -258,9 +232,7 @@ impl Task {
     }
 
     pub fn insert_result_item(&mut self, k: String, v: Option<ProductData>) {
-        if let Some(
-            TaskResult::Data(items_map)
-        ) = &mut self.result {
+        if let Some(TaskResult::Data(items_map)) = &mut self.result {
             items_map.insert(k, v);
         }
     }
@@ -310,5 +282,5 @@ pub struct ApiState {
     /// Лимит на количество открытых WebSockets
     pub open_ws_limit: u32,
     /// Открыто WebSockets на данный момент
-    pub curr_open_ws: u32
+    pub curr_open_ws: u32,
 }

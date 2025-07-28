@@ -1,28 +1,21 @@
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
+
 use async_stream::stream;
 use tokio_stream::Stream;
 
 use super::{
-    req::{
-        ReqSession,
-        ReqMethod
-    },
     super::{
         api::logger,
         config as cfg,
         models::{
+            api::{Task, TaskStatus},
             scraper::Product,
-            api::{
-                Task,
-                TaskStatus
-            }
-        }
-    }
+        },
+    },
+    req::{ReqMethod, ReqSession},
 };
 
-
-static INTERRUPT_CHECK_STEP: Lazy<u64> = Lazy::new(|| cfg::get().api.interrupt_check_step);
-
+static INTERRUPT_CHECK_STEP: LazyLock<u64> = LazyLock::new(|| cfg::get().api.interrupt_check_step);
 
 // struct SkipMap {
 //     oz: bool,
@@ -58,30 +51,33 @@ pub async fn task_stream(mut task: Task) -> impl Stream<Item = Task> {
     let intpt_check_step = *INTERRUPT_CHECK_STEP;
     task.init_progress();
     let order_data = task.extract_order_data();
-    let req_method = if order_data.products
+    let req_method = if order_data
+        .products
         .iter()
-        .find(
-            |p| p.starts_with("oz")
-            || p.starts_with("ym")
-            || p.starts_with("mm")
-        )
-        .is_some() {
-            ReqMethod::Combined
-        } else {
-            ReqMethod::Reqwest
-        };
+        .find(|p| p.starts_with("oz") || p.starts_with("ym") || p.starts_with("mm"))
+        .is_some()
+    {
+        ReqMethod::Combined
+    } else {
+        ReqMethod::Reqwest
+    };
     let req_session_res = ReqSession::new(
         &cfg::get().req_session,
         req_method,
         &order_data.cookies,
-        order_data.proxy_pool
-    ).await;
+        order_data.proxy_pool,
+    )
+    .await;
     logger::write(
-        if req_session_res.is_ok() {log::Level::Info}
-            else {log::Level::Error},
+        if req_session_res.is_ok() {
+            log::Level::Info
+        } else {
+            log::Level::Error
+        },
         "TASK_STREAM",
-        serde_json::to_string(&task).unwrap_or_default()
-    ).await;
+        serde_json::to_string(&task).unwrap_or_default(),
+    )
+    .await;
 
     let stream = stream! {
         match req_session_res {
@@ -171,7 +167,6 @@ mod tests {
         let mut status = true;
         let mut progress = 0;
         let end = 22;
-
 
         while status {
             progress += 1;

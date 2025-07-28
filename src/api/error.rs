@@ -1,19 +1,12 @@
 use axum::{
-    response::{
-        IntoResponse,
-        Response
-    },
     http::StatusCode,
+    response::{IntoResponse, Response},
     Json,
 };
-use utoipa::ToSchema;
 use thiserror::Error;
+use utoipa::ToSchema;
 
-use super::super::{
-    scraper::error::ReqSessionError,
-    models::validation::ValidationError
-};
-
+use super::super::{models::validation::ValidationError, scraper::error::ReqSessionError};
 
 #[derive(Error, Debug, ToSchema)]
 pub enum ApiError {
@@ -104,9 +97,9 @@ impl ApiError {
             | Self::EmptyRequestBody(_)
             | Self::EmptyOrder => StatusCode::BAD_REQUEST,
 
-            Self::TaskNotFound
-            | Self::TokenDoesNotExist
-            | Self::PathNotFound => StatusCode::NOT_FOUND,
+            Self::TaskNotFound | Self::TokenDoesNotExist | Self::PathNotFound => {
+                StatusCode::NOT_FOUND
+            }
 
             Self::QueueOverflow(_)
             | Self::DuplicateTask(_)
@@ -162,11 +155,13 @@ impl From<ReqSessionError> for ApiError {
 impl From<ValidationError> for ApiError {
     fn from(value: ValidationError) -> Self {
         match value {
-            ValidationError::Proxy(e) =>
-                ApiError::InvalidOrderParameter(format!("order proxy {}", e)),
+            ValidationError::Proxy(e) => {
+                ApiError::InvalidOrderParameter(format!("order proxy {}", e))
+            }
 
-            ValidationError::Product(e) =>
-                ApiError::InvalidOrderParameter(format!("order product {}", e)),
+            ValidationError::Product(e) => {
+                ApiError::InvalidOrderParameter(format!("order product {}", e))
+            }
         }
     }
 }

@@ -1,9 +1,8 @@
-mod scraper;
-mod models;
-mod config;
-mod utils;
 mod api;
-
+mod config;
+mod models;
+mod scraper;
+mod utils;
 
 // +- Сделать логирование
 // * Написать функцию теста всех систем перед запуском
@@ -48,8 +47,10 @@ async fn main() {
     let (listener, app) = api::app::init().await;
     axum::serve(
         listener,
-        app.into_make_service_with_connect_info::<std::net::SocketAddr>()
-    ).await.unwrap();
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await
+    .unwrap();
 }
 
 #[cfg(test)]

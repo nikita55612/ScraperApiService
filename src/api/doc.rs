@@ -1,39 +1,25 @@
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
+
 use serde::Serialize;
 use utoipa::{
-	openapi::{
-		self,
-		security::{
-			HttpAuthScheme,
-			HttpBuilder,
-			SecurityScheme
-		}
-	},
-	Modify,
-	OpenApi
+    openapi::{
+        self,
+        security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
+    },
+    Modify, OpenApi,
 };
-
 
 use super::{
     super::{
         api::app::ROOT_API_PATH,
-        config::{
-            self as cfg,
-            Config,
-        },
+        config::{self as cfg, Config},
         models::{
-            api::{
-                ApiState,
-                Order,
-                Task,
-                Token
-            },
-            scraper::Market
-        }
+            api::{ApiState, Order, Task, Token},
+            scraper::Market,
+        },
     },
-    error::ApiError
+    error::ApiError,
 };
-
 
 #[derive(Debug, Serialize)]
 struct ApiToken;
@@ -54,11 +40,11 @@ impl Modify for ApiToken {
     }
 }
 
-pub static API_DESCRIPTION: Lazy<String> = Lazy::new(|| {
+pub static API_DESCRIPTION: LazyLock<String> = LazyLock::new(|| {
     if let Some(path) = &cfg::get().api.description_file_path {
         match std::fs::read_to_string(path) {
             Ok(content) => content,
-            Err(_) => DEFAULT_API_DESCRIPTION.into()
+            Err(_) => DEFAULT_API_DESCRIPTION.into(),
         }
     } else {
         DEFAULT_API_DESCRIPTION.into()
@@ -948,11 +934,10 @@ mod tests {
 
     #[test]
     fn test_openapi() {
-		std::fs::write(
-			"openapi.json",
-			serde_json::to_string_pretty(
-				&ApiDoc::openapi()
-			).unwrap()
-		).unwrap();
+        std::fs::write(
+            "openapi.json",
+            serde_json::to_string_pretty(&ApiDoc::openapi()).unwrap(),
+        )
+        .unwrap();
     }
 }
